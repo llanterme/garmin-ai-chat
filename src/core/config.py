@@ -55,6 +55,22 @@ class Settings(BaseSettings):
         description="32-character key for encrypting Garmin credentials"
     )
 
+    # AI/ML Configuration
+    openai_api_key: str = Field(
+        description="OpenAI API key for embeddings and chat completions"
+    )
+    pinecone_api_key: str = Field(
+        description="Pinecone API key for vector database"
+    )
+    pinecone_environment: str = Field(
+        default="us-east-1",
+        description="Pinecone environment region"
+    )
+    pinecone_index_name: str = Field(
+        default="garmin-fitness-activities",
+        description="Pinecone index name for storing activity embeddings"
+    )
+
     # Logging
     log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
     log_file: Optional[str] = None

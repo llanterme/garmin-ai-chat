@@ -64,6 +64,14 @@
     {
       "key": "sync_id",
       "value": ""
+    },
+    {
+      "key": "conversation_id",
+      "value": ""
+    },
+    {
+      "key": "chat_query",
+      "value": "What was my longest run last week?"
     }
   ],
   "item": [
@@ -1030,6 +1038,534 @@
               }
             }
           ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Chat & AI",
+      "item": [
+        {
+          "name": "Chat Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "health"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has service statuses', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('status');",
+                  "    pm.expect(responseJson).to.have.property('services');",
+                  "    pm.expect(responseJson).to.have.property('timestamp');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Start Activity Ingestion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"force_reingest\": false,\n  \"batch_size\": 10\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/ingestion/start",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "ingestion", "start"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has ingestion status', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('status');",
+                  "    pm.expect(responseJson).to.have.property('total_activities');",
+                  "    pm.expect(responseJson).to.have.property('processed_activities');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Check Ingestion Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/ingestion/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "ingestion", "status"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has embeddings status', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('database_activities');",
+                  "    pm.expect(responseJson).to.have.property('vectorized_activities');",
+                  "    pm.expect(responseJson).to.have.property('sync_needed');",
+                  "    pm.expect(responseJson).to.have.property('sync_percentage');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get Activity Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "stats"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has vector statistics', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('total_vectors');",
+                  "    pm.expect(responseJson).to.have.property('estimated_activities');",
+                  "    pm.expect(responseJson).to.have.property('namespace');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Chat Query - Basic",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"{{chat_query}}\",\n  \"search_limit\": 15,\n  \"include_follow_ups\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/query",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "query"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has chat data', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('response');",
+                  "    pm.expect(responseJson).to.have.property('conversation_id');",
+                  "    pm.expect(responseJson).to.have.property('relevant_activities');",
+                  "    pm.expect(responseJson).to.have.property('follow_up_questions');",
+                  "    pm.expect(responseJson).to.have.property('activity_count');",
+                  "",
+                  "    // Store conversation ID for follow-up queries",
+                  "    if (responseJson.conversation_id) {",
+                  "        pm.collectionVariables.set('conversation_id', responseJson.conversation_id);",
+                  "    }",
+                  "});",
+                  "",
+                  "console.log('Chat response:', pm.response.json().response);",
+                  "console.log('Activities found:', pm.response.json().activity_count);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Chat Query - Temporal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"What did I do yesterday?\",\n  \"conversation_id\": \"{{conversation_id}}\",\n  \"search_limit\": 10,\n  \"include_follow_ups\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/query",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "query"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Chat Query - Performance Analysis",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"How's my running pace improving this month?\",\n  \"conversation_id\": \"{{conversation_id}}\",\n  \"search_limit\": 25,\n  \"include_follow_ups\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/query",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "query"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Chat Query - Aggregation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"How many calories did I burn this week?\",\n  \"conversation_id\": \"{{conversation_id}}\",\n  \"search_limit\": 50,\n  \"include_follow_ups\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/query",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "query"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Chat Query - Activity Comparison",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Compare my cycling power output this month vs last month\",\n  \"search_limit\": 100,\n  \"include_follow_ups\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/query",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "query"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Conversations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/conversations",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "conversations"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has conversations list', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('conversations');",
+                  "    pm.expect(responseJson).to.have.property('total_count');",
+                  "    pm.expect(responseJson.conversations).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get Conversation History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/conversations/{{conversation_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "conversations", "{{conversation_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const conversationId = pm.collectionVariables.get('conversation_id');",
+                  "if (!conversationId) {",
+                  "    console.log('No conversation_id available. Run a chat query first.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const conversationId = pm.collectionVariables.get('conversation_id');",
+                  "if (conversationId) {",
+                  "    pm.test('Status code is 200', function () {",
+                  "        pm.response.to.have.status(200);",
+                  "    });",
+                  "",
+                  "    pm.test('Response has conversation history', function () {",
+                  "        const responseJson = pm.response.json();",
+                  "        pm.expect(responseJson).to.have.property('conversation_id');",
+                  "        pm.expect(responseJson).to.have.property('messages');",
+                  "        pm.expect(responseJson).to.have.property('message_count');",
+                  "        pm.expect(responseJson.messages).to.be.an('array');",
+                  "    });",
+                  "} else {",
+                  "    console.log('Skipped - no conversation_id available');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Clear Conversation",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/conversations/{{conversation_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "conversations", "{{conversation_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const conversationId = pm.collectionVariables.get('conversation_id');",
+                  "if (!conversationId) {",
+                  "    console.log('No conversation_id available. Run a chat query first.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get Chat Suggestions - General",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/suggestions",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "suggestions"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has suggestions', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('suggestions');",
+                  "    pm.expect(responseJson).to.have.property('category');",
+                  "    pm.expect(responseJson.suggestions).to.be.an('array');",
+                  "    pm.expect(responseJson.suggestions.length).to.be.greaterThan(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get Chat Suggestions - Running",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/suggestions?activity_type=running&recent_query=pace",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "suggestions"],
+              "query": [
+                {
+                  "key": "activity_type",
+                  "value": "running"
+                },
+                {
+                  "key": "recent_query",
+                  "value": "pace"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Chat Suggestions - Cycling",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/suggestions?activity_type=cycling",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "suggestions"],
+              "query": [
+                {
+                  "key": "activity_type",
+                  "value": "cycling"
+                }
+              ]
+            }
+          },
           "response": []
         }
       ]
