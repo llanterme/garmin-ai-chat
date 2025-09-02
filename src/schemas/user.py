@@ -1,7 +1,7 @@
 """User-related Pydantic schemas."""
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -81,3 +81,14 @@ class UserProfile(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class UserDataDeletionResponse(BaseModel):
+    """Response schema for user data deletion."""
+    
+    user_id: str = Field(..., description="User ID whose data was deleted")
+    status: str = Field(..., description="Deletion status: success, partial, or failed")
+    activities_deleted: int = Field(..., description="Number of activities deleted")
+    sync_history_deleted: int = Field(..., description="Number of sync history records deleted")
+    vectors_deleted: bool = Field(..., description="Whether vectors were deleted from Pinecone")
+    errors: List[str] = Field(default_factory=list, description="List of any errors that occurred")

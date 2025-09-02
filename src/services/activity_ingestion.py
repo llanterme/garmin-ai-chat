@@ -333,9 +333,38 @@ class ActivityIngestionService:
             )
             db_count = result.scalar()
             
-            # Get vector stats
-            vector_stats = await self.get_user_activity_stats(user_id)
-            vector_activity_count = vector_stats.get("estimated_activities", 0)
+            # Try to get vector count using search query (workaround for serverless limitations)
+            try:
+                namespace = f"user_{user_id}"
+                # Query for any vectors in the user namespace to count them
+                dummy_vector = [0.0] * 1536  # Create dummy vector for counting
+                search_results = self.vector_db.index.query(
+                    vector=dummy_vector,
+                    filter={"user_id": user_id, "vector_type": "main"},
+                    top_k=10000,  # Large number to get all activities
+                    include_metadata=True,
+                    namespace=namespace
+                )
+                vector_activity_count = len(search_results.matches)
+                logger.info(f"Found {vector_activity_count} vectorized activities for user {user_id}")
+            except Exception as vector_error:
+                logger.warning(f"Could not count vectors directly: {str(vector_error)}")
+                # Fallback to sync_history for successful syncs
+                sync_result = await session.execute(
+                    text("""
+                        SELECT activities_synced 
+                        FROM sync_history 
+                        WHERE user_id = :user_id 
+                        AND sync_type = 'activities' 
+                        AND status = 'success'
+                        ORDER BY completed_at DESC 
+                        LIMIT 1
+                    """),
+                    {"user_id": user_id}
+                )
+                sync_activities = sync_result.scalar()
+                vector_activity_count = sync_activities if sync_activities is not None else 0
+                logger.info(f"Using sync_history count for user {user_id}: {vector_activity_count} activities")
             
             return {
                 "database_activities": db_count,

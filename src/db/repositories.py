@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, List, Optional, Sequence
 
-from sqlalchemy import and_, desc, select
+from sqlalchemy import and_, desc, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -192,6 +192,14 @@ class ActivityRepository(BaseRepository):
         result = await self.session.execute(query)
         return len(list(result.scalars().all()))
 
+    async def delete_user_activities(self, user_id: str) -> int:
+        """Delete all activities for a user."""
+        result = await self.session.execute(
+            delete(Activity).where(Activity.user_id == user_id)
+        )
+        await self.commit()
+        return result.rowcount
+
 
 class SyncHistoryRepository(BaseRepository):
     """Repository for sync history operations."""
@@ -254,3 +262,11 @@ class SyncHistoryRepository(BaseRepository):
             .limit(1)
         )
         return result.scalar_one_or_none()
+
+    async def delete_user_sync_history(self, user_id: str) -> int:
+        """Delete all sync history records for a user."""
+        result = await self.session.execute(
+            delete(SyncHistory).where(SyncHistory.user_id == user_id)
+        )
+        await self.commit()
+        return result.rowcount

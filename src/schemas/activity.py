@@ -123,6 +123,21 @@ class ActivityResponse(BaseModel):
         from_attributes = True
 
 
+class NormalizedMetrics(BaseModel):
+    """Normalized metrics in human-readable units."""
+    
+    duration_formatted: Optional[str] = Field(None, description="Duration formatted (HH:MM:SS)")
+    distance_km: Optional[float] = Field(None, description="Distance in kilometers")
+    distance_miles: Optional[float] = Field(None, description="Distance in miles")
+    average_speed_kmh: Optional[float] = Field(None, description="Average speed in km/h")
+    average_speed_mph: Optional[float] = Field(None, description="Average speed in mph")
+    max_speed_kmh: Optional[float] = Field(None, description="Maximum speed in km/h")
+    max_speed_mph: Optional[float] = Field(None, description="Maximum speed in mph")
+    average_pace_per_km: Optional[str] = Field(None, description="Average pace per km (MM:SS)")
+    average_pace_per_mile: Optional[str] = Field(None, description="Average pace per mile (MM:SS)")
+    elevation_gain_ft: Optional[float] = Field(None, description="Elevation gain in feet")
+
+
 class ActivitySummary(BaseModel):
     """Activity summary schema for list views."""
 
@@ -131,11 +146,28 @@ class ActivitySummary(BaseModel):
     activity_name: Optional[str] = Field(None, description="Activity name")
     activity_type: str = Field(..., description="Activity type")
     start_time: Optional[datetime] = Field(None, description="Activity start time")
+    
+    # Raw metrics (Garmin native format)
     duration: Optional[float] = Field(None, description="Duration in seconds")
     distance: Optional[float] = Field(None, description="Distance in meters")
     calories: Optional[int] = Field(None, description="Calories burned")
     average_speed: Optional[float] = Field(None, description="Average speed in m/s")
     average_heart_rate: Optional[int] = Field(None, description="Average heart rate")
+    
+    # Power metrics (cycling)
+    average_power: Optional[float] = Field(None, description="Average power in watts")
+    max_power: Optional[float] = Field(None, description="Maximum power in watts")
+    normalized_power: Optional[float] = Field(None, description="Normalized power in watts")
+    
+    # Cadence (cycling/running)
+    average_cadence: Optional[float] = Field(None, description="Average cadence in RPM")
+    max_cadence: Optional[float] = Field(None, description="Maximum cadence in RPM")
+    
+    # Elevation
+    elevation_gain: Optional[float] = Field(None, description="Elevation gain in meters")
+    
+    # Normalized human-readable metrics
+    normalized: NormalizedMetrics = Field(default_factory=NormalizedMetrics, description="Human-readable metrics")
 
     class Config:
         from_attributes = True
