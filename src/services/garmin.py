@@ -62,9 +62,16 @@ class GarminService:
             raise GarminConnectError(f"Authentication failed: {str(e)}")
 
     async def get_activities(
-        self, start_date: datetime, end_date: Optional[datetime] = None, limit: int = 100
+        self, start_date: datetime, end_date: Optional[datetime] = None, limit: Optional[int] = None
     ) -> List[Dict[str, Any]]:
-        """Get activities for a date range."""
+        """
+        Get activities for a date range.
+        
+        Args:
+            start_date: Start date for activities
+            end_date: End date for activities (defaults to now)
+            limit: Optional maximum number of activities to return (defaults to no limit)
+        """
         if not self._client:
             raise GarminConnectError("Not authenticated with Garmin Connect")
 
@@ -72,35 +79,48 @@ class GarminService:
             if end_date is None:
                 end_date = datetime.now()
 
-            activities = []
-            current_date = start_date
+            # Use the get_activities_by_date with both start and end dates
+            # This should return only activities within the specified range
+            activities = await self._run_sync_method(
+                self._client.get_activities_by_date, 
+                start_date.strftime("%Y-%m-%d"),
+                end_date.strftime("%Y-%m-%d")
+            )
             
-            # Get activities day by day to avoid API limits
-            while current_date <= end_date:
-                try:
-                    daily_activities = await self._run_sync_method(
-                        self._client.get_activities_by_date, current_date
-                    )
-                    
-                    if daily_activities:
-                        activities.extend(daily_activities)
-                        logger.debug(f"Retrieved {len(daily_activities)} activities for {current_date.date()}")
-                    
-                    # Rate limiting
-                    await asyncio.sleep(0.5)
-                    
-                except Exception as e:
-                    logger.warning(f"Failed to get activities for {current_date.date()}: {str(e)}")
-                
-                current_date += timedelta(days=1)
-                
-                # Respect limit
-                if len(activities) >= limit:
-                    activities = activities[:limit]
-                    break
+            if activities is None:
+                activities = []
+            
+            # Apply limit if specified
+            if limit is not None and len(activities) > limit:
+                activities = activities[:limit]
 
-            logger.info(f"Retrieved {len(activities)} activities from Garmin Connect")
-            return activities
+            logger.info(f"Retrieved {len(activities)} activities from Garmin Connect for date range {start_date.date()} to {end_date.date()}")
+            
+            # Double-check that activities are actually within our date range
+            filtered_activities = []
+            for activity in activities:
+                activity_date_str = activity.get('startTimeLocal')
+                if activity_date_str:
+                    try:
+                        # Parse the activity date
+                        activity_date = datetime.fromisoformat(activity_date_str.replace('Z', '+00:00'))
+                        # Only include if within our requested range
+                        if start_date <= activity_date <= end_date + timedelta(days=1):  # Add 1 day for end of day
+                            filtered_activities.append(activity)
+                        else:
+                            logger.debug(f"Filtering out activity from {activity_date} (outside range {start_date} to {end_date})")
+                    except Exception as e:
+                        logger.warning(f"Could not parse date {activity_date_str}: {e}")
+                        # Include if we can't parse the date
+                        filtered_activities.append(activity)
+                else:
+                    # Include if no date found
+                    filtered_activities.append(activity)
+            
+            if len(filtered_activities) != len(activities):
+                logger.info(f"Filtered {len(activities)} activities down to {len(filtered_activities)} within date range")
+            
+            return filtered_activities
 
         except Exception as e:
             logger.error(f"Failed to get activities: {str(e)}")

@@ -12,6 +12,8 @@ class SyncRequest(BaseModel):
     days: int = Field(..., ge=1, le=365, description="Number of days to sync (1-365)")
     sync_type: str = Field(default="activities", description="Type of data to sync")
     force_resync: bool = Field(default=False, description="Force re-sync even if already synced")
+    force_reingest: bool = Field(default=False, description="Force re-ingestion of activities to Pinecone")
+    batch_size: int = Field(default=10, ge=1, le=50, description="Batch size for Pinecone ingestion")
 
     @validator("sync_type")
     def validate_sync_type(cls, v):

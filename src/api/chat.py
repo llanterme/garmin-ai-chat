@@ -17,11 +17,8 @@ from ..schemas.chat import (
     ChatResponse,
     ConversationHistory,
     ConversationSummary,
-    EmbeddingsStatus,
     ErrorResponse,
     HealthCheckResponse,
-    IngestionRequest,
-    IngestionStatus,
     SuggestionRequest,
     SuggestionsResponse,
     UserConversationsResponse,
@@ -161,58 +158,6 @@ async def clear_conversation(
             detail=f"Failed to clear conversation: {str(e)}"
         )
 
-
-@router.post("/ingestion/start", response_model=IngestionStatus)
-async def start_activity_ingestion(
-    request: IngestionRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Start ingesting user's activities into vector database."""
-    try:
-        logger.info(f"Starting activity ingestion for user {current_user.id}")
-        
-        ingestion_service = ActivityIngestionService(db)
-        
-        result = await ingestion_service.ingest_user_activities(
-            user_id=current_user.id,
-            session=db,
-            batch_size=request.batch_size,
-            force_reingest=request.force_reingest
-        )
-        
-        return IngestionStatus(**result)
-        
-    except Exception as e:
-        logger.error(f"Activity ingestion failed for user {current_user.id}: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to start activity ingestion: {str(e)}"
-        )
-
-
-@router.get("/ingestion/status", response_model=EmbeddingsStatus)
-async def get_ingestion_status(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get status of embeddings vs database activities."""
-    try:
-        ingestion_service = ActivityIngestionService(db)
-        
-        status = await ingestion_service.get_activity_embeddings_status(
-            user_id=current_user.id,
-            session=db
-        )
-        
-        return EmbeddingsStatus(**status)
-        
-    except Exception as e:
-        logger.error(f"Failed to get ingestion status for user {current_user.id}: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get ingestion status: {str(e)}"
-        )
 
 
 @router.get("/stats", response_model=ActivityStats)

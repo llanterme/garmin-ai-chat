@@ -74,36 +74,12 @@ class UserConversationsResponse(BaseModel):
     total_count: int
 
 
-class IngestionRequest(BaseModel):
-    """Request to start activity ingestion."""
-    force_reingest: bool = Field(False, description="Whether to re-process existing activities")
-    batch_size: int = Field(10, ge=1, le=50, description="Batch size for processing")
-
-
-class IngestionStatus(BaseModel):
-    """Status of activity ingestion process."""
-    status: str = Field(..., description="Status: in_progress, completed, failed, or partial")
-    total_activities: int = Field(..., description="Total activities to process")
-    processed_activities: int = Field(..., description="Successfully processed activities")
-    failed_activities: int = Field(..., description="Failed activity count")
-    duration_seconds: float = Field(..., description="Processing duration in seconds")
-    error_message: Optional[str] = Field(None, description="Error details if any")
-
-
 class ActivityStats(BaseModel):
     """Statistics about user's vectorized activities."""
     total_vectors: int = Field(..., description="Total vectors stored")
     estimated_activities: int = Field(..., description="Estimated number of activities")
     namespace: str = Field(..., description="User's vector namespace")
     last_updated: str = Field(..., description="Last update timestamp")
-
-
-class EmbeddingsStatus(BaseModel):
-    """Status of embeddings vs database sync."""
-    database_activities: int = Field(..., description="Activities in database")
-    vectorized_activities: int = Field(..., description="Activities with embeddings")
-    sync_needed: bool = Field(..., description="Whether sync is needed")
-    sync_percentage: float = Field(..., description="Sync completion percentage")
 
 
 class SuggestionRequest(BaseModel):

@@ -19,6 +19,7 @@ from ..schemas.auth import (
 )
 from ..schemas.common import SuccessResponse
 from ..schemas.sync import GarminConnectionTest
+from ..schemas.background_task import TaskCreationResponse
 from ..schemas.user import UserDataDeletionResponse, UserResponse
 from ..services.auth import AuthService
 from ..services.sync import SyncService
@@ -155,13 +156,13 @@ async def change_password(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.delete("/me/data", response_model=UserDataDeletionResponse)
+@router.delete("/me/data", response_model=TaskCreationResponse)
 async def delete_user_data(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Delete all user data including activities, sync history, and vectors.
+    Delete all user data including activities, sync history, and vectors in background.
     
     This is a destructive operation that cannot be undone.
     It will remove:
@@ -172,12 +173,17 @@ async def delete_user_data(
     try:
         cleanup_service = UserCleanupService()
         
-        result = await cleanup_service.delete_all_user_data(
+        # Start background cleanup
+        task_id = await cleanup_service.start_background_cleanup(
             user_id=current_user.id,
             session=db
         )
         
-        return UserDataDeletionResponse(**result)
+        return TaskCreationResponse(
+            task_id=task_id,
+            message="Data deletion started successfully",
+            status_url=f"/api/v1/tasks/{task_id}"
+        )
         
     except Exception as e:
         raise HTTPException(

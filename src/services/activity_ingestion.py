@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.logging import get_logger
 from ..db.repositories import ActivityRepository
+from .background_task import BackgroundTaskService
 from .embedding import EmbeddingService
 from .temporal_processor import QueryContext, TemporalQueryProcessor
 from .vector_db import VectorDBService
@@ -32,7 +33,8 @@ class ActivityIngestionService:
         user_id: str,
         session: AsyncSession,
         batch_size: int = 10,
-        force_reingest: bool = False
+        force_reingest: bool = False,
+        progress_callback: Optional[callable] = None
     ) -> Dict[str, Any]:
         """Ingest all activities for a user into vector database."""
         start_time = datetime.now()
@@ -70,10 +72,26 @@ class ActivityIngestionService:
             processed_count = 0
             failed_count = 0
             failed_activities = []
+            total_activities = len(activities)
+            
+            # Initial progress callback
+            if progress_callback:
+                await progress_callback(0, total_activities, "Starting activity ingestion...")
             
             for i in range(0, len(activities), batch_size):
                 batch = activities[i:i + batch_size]
-                logger.info(f"Processing batch {i//batch_size + 1}/{(len(activities) + batch_size - 1)//batch_size}")
+                batch_num = i//batch_size + 1
+                total_batches = (len(activities) + batch_size - 1)//batch_size
+                
+                logger.info(f"Processing batch {batch_num}/{total_batches}")
+                
+                # Progress callback for batch start
+                if progress_callback:
+                    await progress_callback(
+                        processed_count + failed_count, 
+                        total_activities, 
+                        f"Processing batch {batch_num}/{total_batches}..."
+                    )
                 
                 # Process batch with concurrency
                 batch_results = await asyncio.gather(
@@ -91,8 +109,201 @@ class ActivityIngestionService:
                     else:
                         processed_count += 1
                 
+                # Progress callback for batch completion
+                if progress_callback:
+                    await progress_callback(
+                        processed_count + failed_count, 
+                        total_activities, 
+                        f"Completed batch {batch_num}/{total_batches}"
+                    )
+                
                 # Rate limiting between batches
                 await asyncio.sleep(0.5)
+            
+            duration = (datetime.now() - start_time).total_seconds()
+            
+            # Final progress callback
+            if progress_callback:
+                await progress_callback(
+                    processed_count + failed_count, 
+                    total_activities, 
+                    "Ingestion completed"
+                )
+            
+            result = {
+                "status": "completed" if failed_count == 0 else "partial",
+                "total_activities": len(activities),
+                "processed_activities": processed_count,
+                "ingested_count": processed_count,
+                "vectorized_activities": processed_count, 
+                "failed_activities": failed_count,
+                "duration_seconds": duration,
+                "error_message": "; ".join(failed_activities[:5]) if failed_activities else None
+            }
+            
+            logger.info(f"Completed ingestion for user {user_id}: {processed_count}/{len(activities)} activities processed")
+            return result
+            
+        except Exception as e:
+            duration = (datetime.now() - start_time).total_seconds()
+            logger.error(f"Activity ingestion failed for user {user_id}: {str(e)}")
+            return {
+                "status": "failed",
+                "total_activities": 0,
+                "processed_activities": 0,
+                "failed_activities": 0,
+                "duration_seconds": duration,
+                "error_message": str(e)
+            }
+    
+    async def start_background_ingestion(
+        self,
+        user_id: str,
+        session: AsyncSession,
+        batch_size: int = 10,
+        force_reingest: bool = False
+    ) -> str:
+        """
+        Start a background ingestion task.
+        
+        Returns task_id for tracking progress.
+        """
+        # Create background task
+        task_service = BackgroundTaskService(session)
+        task_id = await task_service.create_task(
+            user_id=user_id,
+            task_type="ingestion",
+            task_name="Ingest activities to vector database",
+            session=session
+        )
+        
+        # Start the background task
+        await task_service.run_background_task(
+            task_id,
+            self._background_ingest_activities,
+            user_id=user_id,
+            batch_size=batch_size,
+            force_reingest=force_reingest
+        )
+        
+        return task_id
+    
+    async def _background_ingest_activities(
+        self,
+        task_id: str,
+        session: AsyncSession,
+        user_id: str,
+        batch_size: int = 10,
+        force_reingest: bool = False
+    ) -> Dict:
+        """
+        Run activity ingestion in background with progress tracking.
+        """
+        task_service = BackgroundTaskService(session)
+        start_time = datetime.now()
+        
+        try:
+            # Initialize repository with background session
+            activity_repo = ActivityRepository(session)
+            
+            # Update progress: Starting
+            await task_service.update_progress(
+                task_id, 5.0, "Initializing ingestion...", session
+            )
+            
+            logger.info(f"Starting background activity ingestion for user {user_id}")
+            
+            # Get all activities for user
+            activities = await activity_repo.get_user_activities(
+                user_id=user_id,
+                skip=0,
+                limit=10000  # Large limit to get all activities
+            )
+            
+            if not activities:
+                await task_service.update_progress(
+                    task_id, 90.0, "No activities found", session
+                )
+                logger.info(f"No activities found for user {user_id}")
+                return {
+                    "status": "completed",
+                    "total_activities": 0,
+                    "processed_activities": 0,
+                    "failed_activities": 0,
+                    "duration_seconds": 0,
+                    "error_message": None
+                }
+            
+            total_activities = len(activities)
+            logger.info(f"Found {total_activities} activities for user {user_id}")
+            
+            # Update progress: Clear existing vectors if force reingest
+            if force_reingest:
+                await task_service.update_progress(
+                    task_id, 10.0, "Clearing existing vectors...", session
+                )
+                await self.vector_db.delete_user_activities(user_id)
+                logger.info(f"Cleared existing vectors for user {user_id}")
+            
+            # Update progress: Processing activities
+            await task_service.update_progress(
+                task_id, 15.0, f"Processing {total_activities} activities in batches...", session
+            )
+            
+            # Process activities in batches
+            processed_count = 0
+            failed_count = 0
+            failed_activities = []
+            
+            total_batches = (total_activities + batch_size - 1) // batch_size
+            
+            for batch_idx in range(0, total_activities, batch_size):
+                batch = activities[batch_idx:batch_idx + batch_size]
+                batch_num = (batch_idx // batch_size) + 1
+                
+                # Update progress
+                progress = 15.0 + (batch_idx / total_activities) * 70.0  # 15% to 85%
+                await task_service.update_progress(
+                    task_id,
+                    progress,
+                    f"Processing batch {batch_num}/{total_batches} ({len(batch)} activities)...",
+                    session
+                )
+                
+                logger.info(f"Processing batch {batch_num}/{total_batches}")
+                
+                # Process batch with concurrency
+                batch_results = await asyncio.gather(
+                    *[self._process_single_activity(user_id, activity) for activity in batch],
+                    return_exceptions=True
+                )
+                
+                # Count results
+                for j, result in enumerate(batch_results):
+                    if isinstance(result, Exception):
+                        failed_count += 1
+                        activity_id = batch[j].garmin_activity_id
+                        failed_activities.append(f"Activity {activity_id}: {str(result)}")
+                        logger.error(f"Failed to process activity {activity_id}: {str(result)}")
+                    else:
+                        processed_count += 1
+                
+                # Update progress within batch
+                batch_progress = 15.0 + ((batch_idx + len(batch)) / total_activities) * 70.0
+                await task_service.update_progress(
+                    task_id,
+                    batch_progress,
+                    f"Completed batch {batch_num}/{total_batches} - {processed_count} processed, {failed_count} failed",
+                    session
+                )
+                
+                # Rate limiting between batches
+                await asyncio.sleep(0.5)
+            
+            # Update progress: Finalizing
+            await task_service.update_progress(
+                task_id, 90.0, "Finalizing ingestion...", session
+            )
             
             duration = (datetime.now() - start_time).total_seconds()
             
@@ -105,12 +316,12 @@ class ActivityIngestionService:
                 "error_message": "; ".join(failed_activities[:5]) if failed_activities else None
             }
             
-            logger.info(f"Completed ingestion for user {user_id}: {processed_count}/{len(activities)} activities processed")
+            logger.info(f"Completed background ingestion for user {user_id}: {processed_count}/{len(activities)} activities processed")
             return result
             
         except Exception as e:
             duration = (datetime.now() - start_time).total_seconds()
-            logger.error(f"Activity ingestion failed for user {user_id}: {str(e)}")
+            logger.error(f"Background activity ingestion failed for user {user_id}: {str(e)}")
             return {
                 "status": "failed",
                 "total_activities": 0,

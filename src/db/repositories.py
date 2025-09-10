@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..core.exceptions import DatabaseError, NotFoundError
-from .models import Activity, SyncHistory, User
+from .models import Activity, BackgroundTask, SyncHistory, User
 
 
 class BaseRepository:
@@ -267,6 +267,67 @@ class SyncHistoryRepository(BaseRepository):
         """Delete all sync history records for a user."""
         result = await self.session.execute(
             delete(SyncHistory).where(SyncHistory.user_id == user_id)
+        )
+        await self.commit()
+        return result.rowcount
+
+
+class BackgroundTaskRepository(BaseRepository):
+    """Repository for background task operations."""
+
+    async def create(self, task_data: Dict[str, Any]) -> BackgroundTask:
+        """Create a new background task record."""
+        task = BackgroundTask(**task_data)
+        self.session.add(task)
+        await self.commit()
+        await self.session.refresh(task)
+        return task
+
+    async def get_by_id(self, task_id: str) -> Optional[BackgroundTask]:
+        """Get background task by ID."""
+        result = await self.session.execute(
+            select(BackgroundTask).where(BackgroundTask.id == task_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def update(self, task_id: str, update_data: Dict[str, Any]) -> Optional[BackgroundTask]:
+        """Update background task."""
+        task = await self.get_by_id(task_id)
+        if not task:
+            return None
+
+        for key, value in update_data.items():
+            if hasattr(task, key):
+                setattr(task, key, value)
+
+        await self.commit()
+        await self.session.refresh(task)
+        return task
+
+    async def get_user_tasks(
+        self, 
+        user_id: str, 
+        task_type: Optional[str] = None,
+        skip: int = 0, 
+        limit: int = 50
+    ) -> List[BackgroundTask]:
+        """Get background tasks for a user."""
+        query = select(BackgroundTask).where(BackgroundTask.user_id == user_id)
+
+        if task_type:
+            query = query.where(BackgroundTask.task_type == task_type)
+
+        result = await self.session.execute(
+            query.order_by(desc(BackgroundTask.created_at)).offset(skip).limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def delete_old_tasks(self, days_old: int = 30) -> int:
+        """Delete background tasks older than specified days."""
+        from datetime import timedelta
+        cutoff_date = datetime.utcnow() - timedelta(days=days_old)
+        result = await self.session.execute(
+            delete(BackgroundTask).where(BackgroundTask.created_at < cutoff_date)
         )
         await self.commit()
         return result.rowcount
