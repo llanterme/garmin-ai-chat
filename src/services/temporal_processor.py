@@ -99,15 +99,56 @@ class TemporalQueryProcessor:
             r'\bhr\s+below\s+([\d.]+)\s*(?:bpm)?\b': lambda m: MetricFilter(field="average_heart_rate", operator="lt", value=float(m.group(1))),
         }
         
-        # Activity type patterns
+        # Activity type patterns with multiple synonyms and variations
         self.activity_type_patterns = {
-            r'\b(running?|runs?)\b': "running",
-            r'\b(cycling?|rides?|bike|biking)\b': "cycling", 
-            r'\b(swimming?|swims?)\b': "swimming",
-            r'\b(walking?|walks?)\b': "walking",
-            r'\b(strength|weights?|lifting)\b': "strength_training",
-            r'\btreadmill\b': "treadmill_running",
-            r'\bindoor\b': "virtual_ride",
+            # Running and related activities
+            r'\b(running?|runs?|ran|jogging?|jogs?|marathon|5k|10k)\b': "running",
+            r'\btreadmill\s*(running?)?\b': "treadmill_running",
+            
+            # Cycling and related activities  
+            r'\b(cycling?|cycles?|cycled|rides?|rode|ridden|bike|biking|biked|pedal|pedaling)\b': "cycling",
+            r'\b(virtual\s*rides?|indoor\s*(cycling?|rides?|bike)|zwift|trainer|turbo)\b': "virtual_ride",
+            r'\b(spin|spinning)\b': "virtual_ride",
+            
+            # Swimming
+            r'\b(swimming?|swims?|swam|swum|pool|laps?)\b': "swimming",
+            
+            # Walking and hiking
+            r'\b(walking?|walks?|walked|hiking?|hikes?|hiked|trekking?)\b': "walking",
+            
+            # Strength training
+            r'\b(strength|weights?|lifting|gym|workout|resistance|crossfit)\b': "strength_training",
+            
+            # Other activities
+            r'\b(yoga|pilates|stretching?)\b': "yoga",
+            r'\b(rowing?|rows?|rowed|erg)\b': "rowing",
+            r'\b(skiing?|skis?|skied|snowboarding?)\b': "winter_sports",
+        }
+        
+        # Activity type aliases - map common terms to stored activity types
+        self.activity_type_aliases = {
+            "ride": ["cycling", "virtual_ride"],
+            "rides": ["cycling", "virtual_ride"],
+            "cycle": ["cycling", "virtual_ride"],
+            "cycles": ["cycling", "virtual_ride"],
+            "run": ["running", "treadmill_running"],
+            "runs": ["running", "treadmill_running"],
+            "bike": ["cycling", "virtual_ride"],
+            "bikes": ["cycling", "virtual_ride"],
+            "swim": ["swimming"],
+            "swims": ["swimming"],
+            "walk": ["walking"],
+            "walks": ["walking"],
+            "workout": ["strength_training", "running", "cycling"],
+            "workouts": ["strength_training", "running", "cycling"],
+            "exercise": ["running", "cycling", "strength_training", "walking"],
+            "exercises": ["running", "cycling", "strength_training", "walking"],
+            "training": ["running", "cycling", "strength_training"],
+            "cardio": ["running", "cycling", "virtual_ride", "treadmill_running"],
+            "indoor": ["virtual_ride", "treadmill_running", "strength_training"],
+            "outdoor": ["running", "cycling", "walking"],
+            "session": ["strength_training", "running", "cycling"],
+            "sessions": ["strength_training", "running", "cycling"],
         }
         
         # Query type patterns
@@ -195,10 +236,20 @@ class TemporalQueryProcessor:
         return filters
     
     def _extract_activity_type(self, query: str) -> Optional[str]:
-        """Extract activity type from query."""
+        """Extract activity type from query with intelligent matching."""
+        # First try exact pattern matching
         for pattern, activity_type in self.activity_type_patterns.items():
             if re.search(pattern, query, re.IGNORECASE):
                 return activity_type
+        
+        # Then check for alias terms
+        words = query.lower().split()
+        for word in words:
+            if word in self.activity_type_aliases:
+                # Return the first matching activity type from aliases
+                # This allows flexibility for terms that could match multiple activities
+                return self.activity_type_aliases[word][0]
+        
         return None
     
     def _determine_query_type(self, query: str) -> str:
@@ -222,9 +273,22 @@ class TemporalQueryProcessor:
                 end_str = context.temporal_filter.end_date.strftime('%Y-%m-%d')
                 enhanced_parts.append(f"Query refers to activities between {start_str} and {end_str}.")
         
-        # Add activity type context
+        # Add activity type context with expanded descriptions
         if context.activity_type_filter:
-            enhanced_parts.append(f"Focus on {context.activity_type_filter} activities.")
+            activity_descriptions = {
+                "cycling": "cycling, bike rides, or virtual rides",
+                "virtual_ride": "indoor cycling, virtual rides, trainer sessions, or Zwift rides",
+                "running": "running, jogging, or outdoor runs",
+                "treadmill_running": "treadmill running or indoor running",
+                "swimming": "swimming or pool activities",
+                "walking": "walking, hiking, or trekking",
+                "strength_training": "strength training, weight lifting, gym workouts, or resistance training"
+            }
+            description = activity_descriptions.get(
+                context.activity_type_filter, 
+                context.activity_type_filter
+            )
+            enhanced_parts.append(f"Focus on {description}.")
         
         # Add original query
         enhanced_parts.append(context.original_query)
@@ -235,9 +299,27 @@ class TemporalQueryProcessor:
         """Create Pinecone metadata filter from query context."""
         filter_dict = {}
         
-        # Activity type filter
+        # Activity type filter with support for multiple possible types
         if context.activity_type_filter:
-            filter_dict["activity_type"] = context.activity_type_filter
+            # Map activity types to possible variations stored in the database
+            activity_variations = {
+                "cycling": ["cycling", "virtual_ride", "road_biking", "mountain_biking"],
+                "virtual_ride": ["virtual_ride", "indoor_cycling", "cycling"],
+                "running": ["running", "treadmill_running", "trail_running"],
+                "treadmill_running": ["treadmill_running", "running"],
+                "swimming": ["swimming", "lap_swimming", "open_water_swimming"],
+                "walking": ["walking", "hiking"],
+                "strength_training": ["strength_training", "weight_training"]
+            }
+            
+            # Get variations or use the single type
+            variations = activity_variations.get(context.activity_type_filter, [context.activity_type_filter])
+            
+            # Use $in operator if multiple variations exist
+            if len(variations) > 1:
+                filter_dict["activity_type"] = {"$in": variations}
+            else:
+                filter_dict["activity_type"] = context.activity_type_filter
         
         # Temporal filter
         if context.temporal_filter:
