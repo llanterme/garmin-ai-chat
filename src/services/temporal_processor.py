@@ -17,6 +17,7 @@ class TemporalFilter(BaseModel):
     end_date: Optional[datetime] = None
     date_range_days: Optional[int] = None
     specific_date: Optional[datetime] = None
+    is_exact_date: bool = False  # Flag for exact date matching (like specific weekdays)
 
 
 class MetricFilter(BaseModel):
@@ -57,7 +58,24 @@ class TemporalQueryProcessor:
             r'\btoday\b': lambda m=None: datetime.now(),
             r'\b(\d+)\s+days?\s+ago\b': lambda m: datetime.now() - timedelta(days=int(m.group(1))),
             
-            # Relative weeks
+            # Weekday patterns (MUST come before general week patterns to take priority)
+            r'\b(?:on\s+)?(?:this\s+week\s*(?:\'s)?\s+)?(monday)\b': lambda m: self._get_weekday_in_week(0, "this"),
+            r'\b(?:on\s+)?(?:this\s+week\s*(?:\'s)?\s+)?(tuesday)\b': lambda m: self._get_weekday_in_week(1, "this"),
+            r'\b(?:on\s+)?(?:this\s+week\s*(?:\'s)?\s+)?(wednesday)\b': lambda m: self._get_weekday_in_week(2, "this"),
+            r'\b(?:on\s+)?(?:this\s+week\s*(?:\'s)?\s+)?(thursday)\b': lambda m: self._get_weekday_in_week(3, "this"),
+            r'\b(?:on\s+)?(?:this\s+week\s*(?:\'s)?\s+)?(friday)\b': lambda m: self._get_weekday_in_week(4, "this"),
+            r'\b(?:on\s+)?(?:this\s+week\s*(?:\'s)?\s+)?(saturday)\b': lambda m: self._get_weekday_in_week(5, "this"),
+            r'\b(?:on\s+)?(?:this\s+week\s*(?:\'s)?\s+)?(sunday)\b': lambda m: self._get_weekday_in_week(6, "this"),
+            
+            r'\b(?:on\s+)?last\s+week\s*(?:\'s)?\s+(monday)\b': lambda m: self._get_weekday_in_week(0, "last"),
+            r'\b(?:on\s+)?last\s+week\s*(?:\'s)?\s+(tuesday)\b': lambda m: self._get_weekday_in_week(1, "last"),
+            r'\b(?:on\s+)?last\s+week\s*(?:\'s)?\s+(wednesday)\b': lambda m: self._get_weekday_in_week(2, "last"),
+            r'\b(?:on\s+)?last\s+week\s*(?:\'s)?\s+(thursday)\b': lambda m: self._get_weekday_in_week(3, "last"),
+            r'\b(?:on\s+)?last\s+week\s*(?:\'s)?\s+(friday)\b': lambda m: self._get_weekday_in_week(4, "last"),
+            r'\b(?:on\s+)?last\s+week\s*(?:\'s)?\s+(saturday)\b': lambda m: self._get_weekday_in_week(5, "last"),
+            r'\b(?:on\s+)?last\s+week\s*(?:\'s)?\s+(sunday)\b': lambda m: self._get_weekday_in_week(6, "last"),
+
+            # Relative weeks (after weekday patterns)
             r'\blast\s+week\b': lambda m=None: self._start_of_week() - timedelta(weeks=1),
             r'\bthis\s+week\b': lambda m=None: self._start_of_week(),
             r'\b(\d+)\s+weeks?\s+ago\b': lambda m: datetime.now() - timedelta(weeks=int(m.group(1))),
@@ -214,7 +232,8 @@ class TemporalQueryProcessor:
                     else:
                         # Specific date patterns
                         specific_date = handler(match)
-                        return TemporalFilter(specific_date=specific_date)
+                        is_exact = any(day in pattern.lower() for day in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"])
+                        return TemporalFilter(specific_date=specific_date, is_exact_date=is_exact)
                 except Exception as e:
                     logger.warning(f"Failed to parse temporal pattern {pattern}: {str(e)}")
                     continue
@@ -415,3 +434,30 @@ class TemporalQueryProcessor:
         year = int(year_str) if year_str else datetime.now().year
         
         return datetime(year=year, month=month, day=1)
+    
+    def _get_weekday_in_week(self, target_weekday: int, week: str) -> datetime:
+        """Get specific weekday in current or last week.
+        
+        Args:
+            target_weekday: 0=Monday, 1=Tuesday, 2=Wednesday, 3=Thursday, 4=Friday, 5=Saturday, 6=Sunday
+            week: "this" or "last"
+        """
+        today = datetime.now()
+        current_weekday = today.weekday()
+        
+        if week == "this":
+            # Calculate days from today to target weekday
+            days_diff = target_weekday - current_weekday
+            if days_diff < 0:
+                # Target day has already passed this week, so it was earlier in the week
+                target_date = today + timedelta(days=days_diff)
+            else:
+                # Target day is today or later this week
+                target_date = today + timedelta(days=days_diff)
+        else:  # week == "last"
+            # Go to last week first, then to target weekday
+            last_week_start = today - timedelta(days=current_weekday + 7)  # Last Monday
+            target_date = last_week_start + timedelta(days=target_weekday)
+        
+        # Set to start of day
+        return target_date.replace(hour=0, minute=0, second=0, microsecond=0)

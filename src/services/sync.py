@@ -2,7 +2,7 @@
 
 import asyncio
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,12 +20,12 @@ logger = get_logger(__name__)
 class SyncService:
     """Service for synchronizing Garmin Connect data."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, user_weight_kg: Optional[float] = None, user_ftp: Optional[float] = None, user_max_hr: Optional[int] = None) -> None:
         self.session = session
         self.user_repo = UserRepository(session)
         self.activity_repo = ActivityRepository(session)
         self.sync_history_repo = SyncHistoryRepository(session)
-        self.garmin_service = GarminService()
+        self.garmin_service = GarminService(user_weight_kg, user_ftp, user_max_hr)
 
     async def sync_user_activities(
         self,
@@ -84,10 +84,18 @@ class SyncService:
             activities_failed = 0
             failed_activities = []
 
+            # Get recent activity history for comparison metrics
+            recent_activities = await self.activity_repo.get_user_activities(
+                user_id=user_id, 
+                skip=0, 
+                limit=100  # Get last 100 activities for comparison
+            )
+            activity_history = [self._activity_to_dict(a) for a in recent_activities] if recent_activities else []
+            
             for raw_activity in raw_activities:
                 try:
-                    # Parse activity data
-                    parsed_activity = self.garmin_service.parse_activity_data(raw_activity)
+                    # Parse activity data with history for derived metrics
+                    parsed_activity = self.garmin_service.parse_activity_data(raw_activity, activity_history)
                     parsed_activity["user_id"] = user_id
 
                     # Check if activity already exists
@@ -103,16 +111,32 @@ class SyncService:
                         logger.debug(f"Activity {garmin_activity_id} already exists, skipping")
                         continue
 
-                    # Create or update activity
+                    # Separate base fields from derived metrics
+                    # Define the fields that are valid for the Activity model
+                    valid_activity_fields = {
+                        'garmin_activity_id', 'user_id', 'activity_name', 'activity_type', 'sport_type',
+                        'start_time', 'duration', 'distance', 'start_latitude', 'start_longitude',
+                        'calories', 'average_speed', 'max_speed', 'average_heart_rate', 'max_heart_rate',
+                        'elevation_gain', 'elevation_loss', 'min_elevation', 'max_elevation',
+                        'average_power', 'max_power', 'normalized_power', 'average_cadence', 'max_cadence',
+                        'pool_length', 'strokes', 'swim_stroke_type', 'training_stress_score',
+                        'intensity_factor', 'vo2_max', 'temperature', 'weather_condition',
+                        'raw_data', 'summary_data'
+                    }
+                    
+                    # Filter parsed_activity to only include valid fields for database
+                    db_activity_data = {k: v for k, v in parsed_activity.items() if k in valid_activity_fields}
+                    
+                    # Create or update activity with filtered data
                     if existing_activity and force_resync:
                         # Update existing activity
-                        update_data = {k: v for k, v in parsed_activity.items() 
+                        update_data = {k: v for k, v in db_activity_data.items() 
                                      if k not in ["id", "user_id", "garmin_activity_id", "created_at"]}
                         await self.activity_repo.update(existing_activity.id, update_data)
                         logger.debug(f"Updated existing activity {garmin_activity_id}")
                     else:
                         # Create new activity
-                        await self.activity_repo.create(parsed_activity)
+                        await self.activity_repo.create(db_activity_data)
                         logger.debug(f"Created new activity {garmin_activity_id}")
 
                     activities_synced += 1
@@ -293,6 +317,14 @@ class SyncService:
                     task_id, 25.0, f"Processing {total_activities} activities from last {days} days...", session
                 )
 
+            # Get recent activity history for comparison metrics
+            recent_activities = await activity_repo.get_user_activities(
+                user_id=user_id, 
+                skip=0, 
+                limit=100  # Get last 100 activities for comparison
+            )
+            activity_history = [self._activity_to_dict(a) for a in recent_activities] if recent_activities else []
+
             # Process activities
             activities_synced = 0
             activities_already_exist = 0
@@ -310,8 +342,8 @@ class SyncService:
                         session
                     )
 
-                    # Parse activity data
-                    parsed_activity = self.garmin_service.parse_activity_data(raw_activity)
+                    # Parse activity data with history for derived metrics
+                    parsed_activity = self.garmin_service.parse_activity_data(raw_activity, activity_history)
                     parsed_activity["user_id"] = user_id
 
                     # Check if activity already exists
@@ -328,12 +360,28 @@ class SyncService:
                         activities_already_exist += 1
                         continue
 
+                    # Separate base fields from derived metrics
+                    # Define the fields that are valid for the Activity model
+                    valid_activity_fields = {
+                        'garmin_activity_id', 'user_id', 'activity_name', 'activity_type', 'sport_type',
+                        'start_time', 'duration', 'distance', 'start_latitude', 'start_longitude',
+                        'calories', 'average_speed', 'max_speed', 'average_heart_rate', 'max_heart_rate',
+                        'elevation_gain', 'elevation_loss', 'min_elevation', 'max_elevation',
+                        'average_power', 'max_power', 'normalized_power', 'average_cadence', 'max_cadence',
+                        'pool_length', 'strokes', 'swim_stroke_type', 'training_stress_score',
+                        'intensity_factor', 'vo2_max', 'temperature', 'weather_condition',
+                        'raw_data', 'summary_data'
+                    }
+                    
+                    # Filter parsed_activity to only include valid fields for database
+                    db_activity_data = {k: v for k, v in parsed_activity.items() if k in valid_activity_fields}
+                    
                     # Create or update activity
                     if existing_activity:
-                        await activity_repo.update(existing_activity.id, parsed_activity)
+                        await activity_repo.update(existing_activity.id, db_activity_data)
                         logger.debug(f"Updated existing activity {garmin_activity_id}")
                     else:
-                        await activity_repo.create(parsed_activity)
+                        await activity_repo.create(db_activity_data)
                         logger.debug(f"Created new activity {garmin_activity_id}")
 
                     activities_synced += 1
@@ -564,6 +612,35 @@ class SyncService:
                 "total_activities_synced": 0,
                 "average_sync_duration": None,
             }
+    
+    def _activity_to_dict(self, activity) -> Dict[str, Any]:
+        """Convert SQLAlchemy activity model to dictionary for metrics calculation."""
+        return {
+            "garmin_activity_id": activity.garmin_activity_id,
+            "activity_name": activity.activity_name,
+            "activity_type": activity.activity_type,
+            "sport_type": activity.sport_type,
+            "start_time": activity.start_time,
+            "duration": activity.duration,
+            "distance": activity.distance,
+            "calories": activity.calories,
+            "average_speed": activity.average_speed,
+            "max_speed": activity.max_speed,
+            "average_heart_rate": activity.average_heart_rate,
+            "max_heart_rate": activity.max_heart_rate,
+            "elevation_gain": activity.elevation_gain,
+            "elevation_loss": activity.elevation_loss,
+            "average_power": activity.average_power,
+            "max_power": activity.max_power,
+            "normalized_power": activity.normalized_power,
+            "average_cadence": activity.average_cadence,
+            "max_cadence": activity.max_cadence,
+            "training_stress_score": activity.training_stress_score,
+            "intensity_factor": activity.intensity_factor,
+            "vo2_max": activity.vo2_max,
+            "temperature": activity.temperature,
+            "weather_condition": activity.weather_condition,
+        }
     
     async def _run_ingestion_with_progress(
         self,

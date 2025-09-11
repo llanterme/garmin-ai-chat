@@ -11,6 +11,7 @@ from ..core.logging import get_logger
 from ..db.repositories import ActivityRepository
 from .background_task import BackgroundTaskService
 from .embedding import EmbeddingService
+from .fitness_metrics import FitnessMetricsCalculator
 from .temporal_processor import QueryContext, TemporalQueryProcessor
 from .vector_db import VectorDBService
 
@@ -25,6 +26,7 @@ class ActivityIngestionService:
         self.embedding_service = EmbeddingService()
         self.vector_db = VectorDBService()
         self.temporal_processor = TemporalQueryProcessor()
+        self.fitness_calculator = FitnessMetricsCalculator()
         if session:
             self.activity_repo = ActivityRepository(session)
     
@@ -74,6 +76,9 @@ class ActivityIngestionService:
             failed_activities = []
             total_activities = len(activities)
             
+            # Get activity history for comparison metrics (convert to dict format)
+            activity_history = [self._activity_to_dict(a) for a in activities] if activities else []
+            
             # Initial progress callback
             if progress_callback:
                 await progress_callback(0, total_activities, "Starting activity ingestion...")
@@ -95,7 +100,7 @@ class ActivityIngestionService:
                 
                 # Process batch with concurrency
                 batch_results = await asyncio.gather(
-                    *[self._process_single_activity(user_id, activity) for activity in batch],
+                    *[self._process_single_activity(user_id, activity, activity_history) for activity in batch],
                     return_exceptions=True
                 )
                 
@@ -274,7 +279,7 @@ class ActivityIngestionService:
                 
                 # Process batch with concurrency
                 batch_results = await asyncio.gather(
-                    *[self._process_single_activity(user_id, activity) for activity in batch],
+                    *[self._process_single_activity(user_id, activity, activity_history) for activity in batch],
                     return_exceptions=True
                 )
                 
@@ -331,11 +336,16 @@ class ActivityIngestionService:
                 "error_message": str(e)
             }
     
-    async def _process_single_activity(self, user_id: str, activity) -> bool:
+    async def _process_single_activity(self, user_id: str, activity, activity_history: Optional[List[Dict]] = None) -> bool:
         """Process a single activity into vector embeddings."""
         try:
             # Convert SQLAlchemy model to dict
             activity_data = self._activity_to_dict(activity)
+            
+            # Recalculate derived metrics for optimal embeddings
+            # Note: Database only stores base fields, but embeddings benefit from derived metrics
+            derived_metrics = self.fitness_calculator.calculate_all_metrics(activity_data, activity_history)
+            activity_data.update(derived_metrics)
             
             # Generate embeddings
             embedding_results = await self.embedding_service.process_activity_embeddings(activity_data)
@@ -460,13 +470,95 @@ class ActivityIngestionService:
                 activity_dict["summary_text"] = result.text
                 activities.append(activity_dict)
             
-            logger.info(f"Found {len(activities)} activities for query: {query[:50]}...")
+            logger.info(f"Found {len(activities)} activities from vector search for query: {query[:50]}...")
+            
+            # Apply exact date filtering if the query specifies a specific date
+            if (query_context.temporal_filter and 
+                query_context.temporal_filter.is_exact_date and 
+                query_context.temporal_filter.specific_date):
+                
+                logger.info(f"Applying exact date filter for: {query_context.temporal_filter.specific_date}")
+                filtered_activities = self._filter_activities_by_exact_date(
+                    activities, 
+                    query_context.temporal_filter.specific_date
+                )
+                
+                if filtered_activities:
+                    logger.info(f"Exact date filter reduced {len(activities)} activities to {len(filtered_activities)} activities")
+                    activities = filtered_activities
+                else:
+                    logger.warning(f"Exact date filter found no matches for {query_context.temporal_filter.specific_date}, keeping semantic results as fallback")
+            
+            logger.info(f"Returning {len(activities)} activities for query: {query[:50]}...")
             return activities
             
         except Exception as e:
             logger.error(f"Failed to search user activities: {str(e)}")
             return []
     
+    def _parse_activity_date(self, date_value: Any) -> Optional[datetime]:
+        """Parse activity date from various formats."""
+        if not date_value:
+            return None
+        
+        try:
+            if isinstance(date_value, datetime):
+                return date_value
+            elif isinstance(date_value, str):
+                # Try different date formats
+                for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M:%S.%f']:
+                    try:
+                        return datetime.strptime(date_value, fmt)
+                    except ValueError:
+                        continue
+                        
+                # Try parsing ISO format with timezone
+                from dateutil import parser as dateutil_parser
+                return dateutil_parser.parse(date_value).replace(tzinfo=None)
+        except Exception as e:
+            logger.warning(f"Failed to parse date {date_value}: {str(e)}")
+            return None
+        
+        return None
+    
+    def _matches_exact_date(self, activity_date: Optional[datetime], target_date: datetime, tolerance_hours: int = 24) -> bool:
+        """Check if activity date matches target date within tolerance."""
+        if not activity_date or not target_date:
+            return False
+        
+        # Remove time component for date-only comparison
+        activity_day = activity_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        target_day = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Check exact day match
+        return activity_day == target_day
+    
+    def _filter_activities_by_exact_date(self, activities: List[Dict[str, Any]], target_date: datetime) -> List[Dict[str, Any]]:
+        """Filter activities to only include those matching exact target date."""
+        filtered_activities = []
+        
+        for activity in activities:
+            # Try multiple date fields that might exist
+            date_fields = ['start_time', 'date', 'activity_date', 'created_at']
+            activity_date = None
+            
+            for field in date_fields:
+                if field in activity:
+                    activity_date = self._parse_activity_date(activity[field])
+                    if activity_date:
+                        break
+            
+            if activity_date and self._matches_exact_date(activity_date, target_date):
+                # Add debug info
+                activity['_date_match_debug'] = {
+                    'activity_date': activity_date.isoformat(),
+                    'target_date': target_date.isoformat(),
+                    'matched_field': next((f for f in date_fields if f in activity and self._parse_activity_date(activity[f])), None)
+                }
+                filtered_activities.append(activity)
+        
+        return filtered_activities
+
     async def get_user_activity_stats(self, user_id: str) -> Dict[str, Any]:
         """Get statistics about user's activities in vector database."""
         try:

@@ -103,7 +103,7 @@ class VectorDBService:
         activity_data: Dict[str, Any],
         vector_type: str
     ) -> Dict[str, Any]:
-        """Create comprehensive metadata for activity vector."""
+        """Create comprehensive metadata for activity vector with derived metrics."""
         metadata = {
             # Core identifiers
             "user_id": user_id,
@@ -193,6 +193,100 @@ class VectorDBService:
                 metadata["intensity_score"] = float(activity_data["training_stress_score"])
             except ValueError:
                 pass
+        
+        # Add all derived metrics to metadata for rich filtering
+        
+        # Pace and speed metrics
+        if activity_data.get("pace_per_km"):
+            metadata["pace_per_km"] = activity_data["pace_per_km"]
+        if activity_data.get("pace_per_mile"):
+            metadata["pace_per_mile"] = activity_data["pace_per_mile"]
+        if activity_data.get("grade_adjusted_pace"):
+            metadata["grade_adjusted_pace"] = activity_data["grade_adjusted_pace"]
+        
+        # Power metrics
+        if activity_data.get("watts_per_kg"):
+            metadata["watts_per_kg"] = activity_data["watts_per_kg"]
+        if activity_data.get("normalized_watts_per_kg"):
+            metadata["normalized_watts_per_kg"] = activity_data["normalized_watts_per_kg"]
+        if activity_data.get("ftp_percentage"):
+            metadata["ftp_percentage"] = activity_data["ftp_percentage"]
+        if activity_data.get("calculated_tss"):
+            metadata["tss"] = activity_data["calculated_tss"]
+        if activity_data.get("intensity_factor"):
+            metadata["intensity_factor"] = activity_data["intensity_factor"]
+        if activity_data.get("variability_index"):
+            metadata["variability_index"] = activity_data["variability_index"]
+        if activity_data.get("efficiency_factor"):
+            metadata["efficiency_factor"] = activity_data["efficiency_factor"]
+        
+        # Heart rate zone metrics
+        if activity_data.get("primary_hr_zone"):
+            metadata["primary_hr_zone"] = activity_data["primary_hr_zone"]
+        if activity_data.get("hr_zone_name"):
+            metadata["hr_zone_name"] = activity_data["hr_zone_name"]
+        if activity_data.get("hr_percent_of_max"):
+            metadata["hr_percent_of_max"] = activity_data["hr_percent_of_max"]
+        if activity_data.get("trimp_score"):
+            metadata["trimp_score"] = activity_data["trimp_score"]
+        
+        # Performance indicators
+        if activity_data.get("effort_level"):
+            metadata["effort_level"] = activity_data["effort_level"]
+        if activity_data.get("relative_effort"):
+            metadata["relative_effort"] = activity_data["relative_effort"]
+        if activity_data.get("training_load"):
+            metadata["training_load"] = activity_data["training_load"]
+        if activity_data.get("fatigue_index"):
+            metadata["fatigue_index"] = activity_data["fatigue_index"]
+        if activity_data.get("suffer_score"):
+            metadata["suffer_score"] = activity_data["suffer_score"]
+        
+        # Boolean flags for filtering
+        if activity_data.get("is_personal_record"):
+            metadata["is_personal_record"] = True
+        if activity_data.get("is_interval_workout"):
+            metadata["is_interval_workout"] = True
+        if activity_data.get("is_hard_effort"):
+            metadata["is_hard_effort"] = True
+        if activity_data.get("is_long_run"):
+            metadata["is_long_run"] = True
+        if activity_data.get("is_long_ride"):
+            metadata["is_long_ride"] = True
+        if activity_data.get("is_recovery"):
+            metadata["is_recovery"] = True
+        if activity_data.get("is_weekend"):
+            metadata["is_weekend"] = True
+        
+        # Temporal context
+        if activity_data.get("time_of_day"):
+            metadata["time_of_day"] = activity_data["time_of_day"]
+        if activity_data.get("day_of_week"):
+            metadata["day_of_week"] = activity_data["day_of_week"]
+        if activity_data.get("season"):
+            metadata["season"] = activity_data["season"]
+        if activity_data.get("week_of_year"):
+            metadata["week_of_year"] = activity_data["week_of_year"]
+        
+        # Running specific
+        if activity_data.get("stride_length_m"):
+            metadata["stride_length_m"] = activity_data["stride_length_m"]
+        if activity_data.get("running_efficiency"):
+            metadata["running_efficiency"] = activity_data["running_efficiency"]
+        
+        # Swimming specific
+        if activity_data.get("swolf_score"):
+            metadata["swolf_score"] = activity_data["swolf_score"]
+        if activity_data.get("distance_per_stroke"):
+            metadata["distance_per_stroke"] = activity_data["distance_per_stroke"]
+        if activity_data.get("pace_per_100m"):
+            metadata["pace_per_100m"] = activity_data["pace_per_100m"]
+        
+        # Energy metrics
+        if activity_data.get("calories_per_minute"):
+            metadata["calories_per_minute"] = activity_data["calories_per_minute"]
+        if activity_data.get("metabolic_equivalent"):
+            metadata["metabolic_equivalent"] = activity_data["metabolic_equivalent"]
         
         return self._clean_metadata(metadata)
     

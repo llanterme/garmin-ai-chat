@@ -9,6 +9,7 @@ from garminconnect import Garmin
 from ..core.exceptions import GarminConnectError
 from ..core.logging import get_logger
 from ..core.security import encryption_handler
+from .fitness_metrics import FitnessMetricsCalculator
 
 logger = get_logger(__name__)
 
@@ -16,9 +17,10 @@ logger = get_logger(__name__)
 class GarminService:
     """Service for interacting with Garmin Connect."""
 
-    def __init__(self) -> None:
+    def __init__(self, user_weight_kg: Optional[float] = None, user_ftp: Optional[float] = None, user_max_hr: Optional[int] = None) -> None:
         self._client: Optional[Garmin] = None
         self._session_data: Optional[Dict[str, Any]] = None
+        self.metrics_calculator = FitnessMetricsCalculator(user_weight_kg, user_ftp, user_max_hr)
 
     async def authenticate(
         self, username: str, password: str, session_data: Optional[Dict[str, Any]] = None
@@ -198,9 +200,8 @@ class GarminService:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, lambda: method(*args, **kwargs))
 
-    @staticmethod
-    def parse_activity_data(raw_activity: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse raw Garmin activity data into standardized format."""
+    def parse_activity_data(self, raw_activity: Dict[str, Any], activity_history: Optional[List[Dict]] = None) -> Dict[str, Any]:
+        """Parse raw Garmin activity data into standardized format with derived metrics."""
         try:
             # Extract basic information
             parsed = {
@@ -298,6 +299,20 @@ class GarminService:
                 'average_speed': parsed['average_speed'],
                 'average_heart_rate': parsed['average_heart_rate'],
             }
+            
+            # Calculate all derived metrics
+            derived_metrics = self.metrics_calculator.calculate_all_metrics(parsed, activity_history)
+            
+            # Merge derived metrics into parsed data
+            parsed.update(derived_metrics)
+            
+            # Add derived metrics to summary data for quick access
+            if derived_metrics.get('pace_per_km_formatted'):
+                parsed['summary_data']['pace'] = derived_metrics['pace_per_km_formatted']
+            if derived_metrics.get('watts_per_kg'):
+                parsed['summary_data']['watts_per_kg'] = derived_metrics['watts_per_kg']
+            if derived_metrics.get('training_load'):
+                parsed['summary_data']['training_load'] = derived_metrics['training_load']
 
             return parsed
 

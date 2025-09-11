@@ -72,7 +72,7 @@ class EmbeddingService:
         }
     
     def _create_activity_summary(self, activity_data: Dict[str, Any]) -> str:
-        """Create comprehensive human-readable activity summary."""
+        """Create comprehensive human-readable activity summary with derived metrics."""
         # Extract basic info
         activity_type = activity_data.get("activity_type", "Activity")
         activity_name = activity_data.get("activity_name", "Untitled Activity")
@@ -137,6 +137,26 @@ class EmbeddingService:
         if max_power:
             summary_parts.append(f"Max power: {max_power}W")
         
+        # Add derived metrics to summary
+        pace_formatted = activity_data.get('pace_per_km_formatted')
+        if pace_formatted:
+            summary_parts.append(f"Pace: {pace_formatted} /km")
+        
+        watts_per_kg = activity_data.get('watts_per_kg')
+        if watts_per_kg:
+            summary_parts.append(f"Power-to-weight: {watts_per_kg} W/kg")
+        
+        training_load = activity_data.get('training_load')
+        if training_load:
+            summary_parts.append(f"Training load: {training_load}")
+        
+        effort_level = activity_data.get('effort_level')
+        if effort_level:
+            summary_parts.append(f"Effort: {effort_level}")
+        
+        if activity_data.get('is_personal_record'):
+            summary_parts.append("Personal Record!")
+        
         return ". ".join(summary_parts) + "."
     
     def _create_metrics_summary(self, activity_data: Dict[str, Any]) -> str:
@@ -193,6 +213,32 @@ class EmbeddingService:
         calories = activity_data.get("calories")
         if calories:
             metrics_parts.append(f"calories burned {calories}")
+        
+        # Add derived metrics
+        pace_per_km = activity_data.get('pace_per_km')
+        if pace_per_km:
+            metrics_parts.append(f"pace {pace_per_km} minutes per kilometer")
+        
+        watts_per_kg = activity_data.get('watts_per_kg')
+        if watts_per_kg:
+            metrics_parts.append(f"power to weight ratio {watts_per_kg} watts per kilogram")
+        
+        calculated_tss = activity_data.get('calculated_tss')
+        if calculated_tss:
+            metrics_parts.append(f"training stress score {calculated_tss}")
+        
+        primary_hr_zone = activity_data.get('primary_hr_zone')
+        hr_zone_name = activity_data.get('hr_zone_name')
+        if primary_hr_zone and hr_zone_name:
+            metrics_parts.append(f"primary heart rate zone {primary_hr_zone} {hr_zone_name}")
+        
+        stride_length = activity_data.get('stride_length_m')
+        if stride_length:
+            metrics_parts.append(f"stride length {stride_length} meters")
+        
+        efficiency_factor = activity_data.get('efficiency_factor')
+        if efficiency_factor:
+            metrics_parts.append(f"efficiency factor {efficiency_factor}")
         
         return " ".join(metrics_parts) + "."
     
@@ -251,13 +297,16 @@ class EmbeddingService:
         return ", ".join(temporal_parts) + "."
     
     def _create_performance_summary(self, activity_data: Dict[str, Any]) -> str:
-        """Create performance analysis summary."""
+        """Create performance analysis summary with derived metrics."""
         activity_type = activity_data.get("activity_type", "activity")
         performance_parts = [f"Performance analysis for {activity_type}"]
         
-        # Calculate performance indicators
-        avg_speed = activity_data.get("average_speed")
-        if avg_speed and activity_type in ["running", "cycling"]:
+        # Use derived pace if available, otherwise calculate
+        pace_formatted = activity_data.get('pace_per_km_formatted')
+        if pace_formatted and activity_type in ["running", "treadmill_running"]:
+            performance_parts.append(f"pace {pace_formatted} per kilometer")
+        elif activity_data.get("average_speed"):
+            avg_speed = activity_data.get("average_speed")
             speed_kmh = round(avg_speed * 3.6, 1)
             if activity_type == "running":
                 pace_per_km = round(60 / speed_kmh, 2) if speed_kmh > 0 else None
@@ -306,6 +355,25 @@ class EmbeddingService:
             else:
                 duration_category = "brief session"
             performance_parts.append(duration_category)
+        
+        # Add derived performance indicators
+        if activity_data.get('is_personal_record'):
+            performance_parts.append("personal record achievement")
+        
+        if activity_data.get('is_interval_workout'):
+            performance_parts.append("interval training session")
+            
+        effort_level = activity_data.get('effort_level')
+        if effort_level:
+            performance_parts.append(f"{effort_level} effort intensity")
+        
+        relative_effort = activity_data.get('relative_effort')
+        if relative_effort:
+            performance_parts.append(f"relative effort {relative_effort} out of 10")
+        
+        training_load = activity_data.get('training_load')
+        if training_load:
+            performance_parts.append(f"training load {training_load}")
         
         return ", ".join(performance_parts) + "."
     
