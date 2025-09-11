@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Garmin AI Chat API",
-    "description": "Comprehensive test collection for the Garmin AI Chat Backend API",
+    "description": "Comprehensive test collection for the Garmin AI Chat Backend API with simplified sync+ingestion flow and background task support",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_postman_id": "garmin-ai-chat-api-collection"
   },
@@ -64,6 +64,18 @@
     {
       "key": "sync_id",
       "value": ""
+    },
+    {
+      "key": "task_id",
+      "value": ""
+    },
+    {
+      "key": "conversation_id",
+      "value": ""
+    },
+    {
+      "key": "chat_query",
+      "value": "What was my longest run last week?"
     }
   ],
   "item": [
@@ -435,6 +447,266 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "Delete User Data (Background)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/me/data",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "me", "data"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has task creation data', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('task_id');",
+                  "    pm.expect(responseJson).to.have.property('message');",
+                  "    pm.expect(responseJson).to.have.property('status_url');",
+                  "",
+                  "    // Store task_id for monitoring",
+                  "    pm.collectionVariables.set('task_id', responseJson.task_id);",
+                  "});",
+                  "",
+                  "console.log('Deletion task started:', pm.collectionVariables.get('task_id'));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Background Tasks",
+      "item": [
+        {
+          "name": "Get Task Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tasks", "{{task_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const taskId = pm.collectionVariables.get('task_id');",
+                  "if (!taskId) {",
+                  "    console.log('No task_id available. Run a background operation first.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const taskId = pm.collectionVariables.get('task_id');",
+                  "if (taskId) {",
+                  "    pm.test('Status code is 200', function () {",
+                  "        pm.response.to.have.status(200);",
+                  "    });",
+                  "",
+                  "    pm.test('Response has task status', function () {",
+                  "        const responseJson = pm.response.json();",
+                  "        pm.expect(responseJson).to.have.property('task_id');",
+                  "        pm.expect(responseJson).to.have.property('status');",
+                  "        pm.expect(responseJson).to.have.property('progress_percentage');",
+                  "        pm.expect(responseJson).to.have.property('progress_message');",
+                  "        pm.expect(responseJson).to.have.property('task_type');",
+                  "        pm.expect(responseJson).to.have.property('task_name');",
+                  "    });",
+                  "",
+                  "    const responseJson = pm.response.json();",
+                  "    console.log('Task Status:', responseJson.status);",
+                  "    console.log('Progress:', responseJson.progress_percentage + '%');",
+                  "    console.log('Message:', responseJson.progress_message);",
+                  "    if (responseJson.result_data) {",
+                  "        console.log('Results:', JSON.stringify(responseJson.result_data, null, 2));",
+                  "    }",
+                  "} else {",
+                  "    console.log('Skipped - no task_id available');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get All User Tasks",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/?page=1&page_size=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tasks", ""],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has task list structure', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('tasks');",
+                  "    pm.expect(responseJson).to.have.property('total_count');",
+                  "    pm.expect(responseJson).to.have.property('page');",
+                  "    pm.expect(responseJson).to.have.property('page_size');",
+                  "    pm.expect(responseJson.tasks).to.be.an('array');",
+                  "});",
+                  "",
+                  "const responseJson = pm.response.json();",
+                  "console.log('Total tasks:', responseJson.total_count);",
+                  "console.log('Tasks on this page:', responseJson.tasks.length);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get Tasks by Type - Sync",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/?task_type=sync&page=1&page_size=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tasks", ""],
+              "query": [
+                {
+                  "key": "task_type",
+                  "value": "sync"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Tasks by Type - Ingestion",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/?task_type=ingestion&page=1&page_size=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tasks", ""],
+              "query": [
+                {
+                  "key": "task_type",
+                  "value": "ingestion"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Tasks by Type - Cleanup",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/?task_type=cleanup&page=1&page_size=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tasks", ""],
+              "query": [
+                {
+                  "key": "task_type",
+                  "value": "cleanup"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -680,7 +952,7 @@
       "name": "Synchronization",
       "item": [
         {
-          "name": "Sync Activities - Last 30 Days",
+          "name": "Sync & Ingest Activities - Last 30 Days",
           "request": {
             "method": "POST",
             "header": [
@@ -695,7 +967,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"days\": 30\n}"
+              "raw": "{\n  \"days\": 30,\n  \"force_resync\": false,\n  \"force_reingest\": false,\n  \"batch_size\": 10\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/sync/activities",
@@ -712,16 +984,17 @@
                   "    pm.response.to.have.status(202);",
                   "});",
                   "",
-                  "pm.test('Response has sync_id', function () {",
+                  "pm.test('Response has task creation data', function () {",
                   "    const responseJson = pm.response.json();",
-                  "    pm.expect(responseJson).to.have.property('sync_id');",
-                  "    pm.expect(responseJson).to.have.property('status');",
+                  "    pm.expect(responseJson).to.have.property('task_id');",
+                  "    pm.expect(responseJson).to.have.property('message');",
+                  "    pm.expect(responseJson).to.have.property('status_url');",
                   "",
-                  "    // Store sync_id for monitoring",
-                  "    pm.collectionVariables.set('sync_id', responseJson.sync_id);",
+                  "    // Store task_id for monitoring",
+                  "    pm.collectionVariables.set('task_id', responseJson.task_id);",
                   "});",
                   "",
-                  "console.log('Sync ID saved:', pm.collectionVariables.get('sync_id'));"
+                  "console.log('Sync task started:', pm.collectionVariables.get('task_id'));"
                 ]
               }
             }
@@ -729,7 +1002,7 @@
           "response": []
         },
         {
-          "name": "Sync Activities - Date Range",
+          "name": "Sync & Ingest Activities - Date Range",
           "request": {
             "method": "POST",
             "header": [
@@ -744,7 +1017,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"start_date\": \"2024-08-01\",\n  \"end_date\": \"2024-08-31\"\n}"
+              "raw": "{\n  \"days\": 30,\n  \"force_resync\": false,\n  \"force_reingest\": false,\n  \"batch_size\": 10\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/sync/activities",
@@ -762,8 +1035,8 @@
                   "});",
                   "",
                   "const responseJson = pm.response.json();",
-                  "if (responseJson.sync_id) {",
-                  "    pm.collectionVariables.set('sync_id', responseJson.sync_id);",
+                  "if (responseJson.task_id) {",
+                  "    pm.collectionVariables.set('task_id', responseJson.task_id);",
                   "}"
                 ]
               }
@@ -772,7 +1045,7 @@
           "response": []
         },
         {
-          "name": "Sync Activities - Last 10 Days",
+          "name": "Sync & Ingest Activities - Last 10 Days",
           "request": {
             "method": "POST",
             "header": [
@@ -787,7 +1060,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"days\": 10\n}"
+              "raw": "{\n  \"days\": 10,\n  \"force_resync\": false,\n  \"force_reingest\": false,\n  \"batch_size\": 10\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/sync/activities",
@@ -795,6 +1068,56 @@
               "path": ["api", "v1", "sync", "activities"]
             }
           },
+          "response": []
+        },
+        {
+          "name": "Force Re-sync & Re-ingest Activities",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\\n  \\\"days\\\": 30,\\n  \\\"force_resync\\\": true,\\n  \\\"force_reingest\\\": true,\\n  \\\"batch_size\\\": 5\\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/sync/activities",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "sync", "activities"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 202', function () {",
+                  "    pm.response.to.have.status(202);",
+                  "});",
+                  "",
+                  "pm.test('Response has task creation data', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('task_id');",
+                  "    pm.expect(responseJson).to.have.property('message');",
+                  "    pm.expect(responseJson).to.have.property('status_url');",
+                  "",
+                  "    // Store task_id for monitoring",
+                  "    pm.collectionVariables.set('task_id', responseJson.task_id);",
+                  "});",
+                  "",
+                  "console.log('Force re-sync and re-ingest task started:', pm.collectionVariables.get('task_id'));"
+                ]
+              }
+            }
+          ],
           "response": []
         },
         {
@@ -935,6 +1258,451 @@
       ]
     },
     {
+      "name": "Chat & AI",
+      "item": [
+        {
+          "name": "Chat Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "health"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has service statuses', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('status');",
+                  "    pm.expect(responseJson).to.have.property('services');",
+                  "    pm.expect(responseJson).to.have.property('timestamp');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get Activity Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "stats"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has vector statistics', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('total_vectors');",
+                  "    pm.expect(responseJson).to.have.property('estimated_activities');",
+                  "    pm.expect(responseJson).to.have.property('namespace');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Chat Query - Basic",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"{{chat_query}}\",\n  \"search_limit\": 15,\n  \"include_follow_ups\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/query",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "query"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has chat data', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('response');",
+                  "    pm.expect(responseJson).to.have.property('conversation_id');",
+                  "    pm.expect(responseJson).to.have.property('relevant_activities');",
+                  "    pm.expect(responseJson).to.have.property('follow_up_questions');",
+                  "    pm.expect(responseJson).to.have.property('activity_count');",
+                  "",
+                  "    // Store conversation ID for follow-up queries",
+                  "    if (responseJson.conversation_id) {",
+                  "        pm.collectionVariables.set('conversation_id', responseJson.conversation_id);",
+                  "    }",
+                  "});",
+                  "",
+                  "console.log('Chat response:', pm.response.json().response);",
+                  "console.log('Activities found:', pm.response.json().activity_count);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Chat Query - Temporal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"What did I do yesterday?\",\n  \"conversation_id\": \"{{conversation_id}}\",\n  \"search_limit\": 10,\n  \"include_follow_ups\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/query",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "query"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Chat Query - Performance Analysis",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"How's my running pace improving this month?\",\n  \"conversation_id\": \"{{conversation_id}}\",\n  \"search_limit\": 25,\n  \"include_follow_ups\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/query",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "query"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Chat Query - Aggregation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"How many calories did I burn this week?\",\n  \"conversation_id\": \"{{conversation_id}}\",\n  \"search_limit\": 50,\n  \"include_follow_ups\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/query",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "query"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Chat Query - Activity Comparison",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Compare my cycling power output this month vs last month\",\n  \"search_limit\": 100,\n  \"include_follow_ups\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/query",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "query"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Conversations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/conversations",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "conversations"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has conversations list', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('conversations');",
+                  "    pm.expect(responseJson).to.have.property('total_count');",
+                  "    pm.expect(responseJson.conversations).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get Conversation History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/conversations/{{conversation_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "conversations", "{{conversation_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const conversationId = pm.collectionVariables.get('conversation_id');",
+                  "if (!conversationId) {",
+                  "    console.log('No conversation_id available. Run a chat query first.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const conversationId = pm.collectionVariables.get('conversation_id');",
+                  "if (conversationId) {",
+                  "    pm.test('Status code is 200', function () {",
+                  "        pm.response.to.have.status(200);",
+                  "    });",
+                  "",
+                  "    pm.test('Response has conversation history', function () {",
+                  "        const responseJson = pm.response.json();",
+                  "        pm.expect(responseJson).to.have.property('conversation_id');",
+                  "        pm.expect(responseJson).to.have.property('messages');",
+                  "        pm.expect(responseJson).to.have.property('message_count');",
+                  "        pm.expect(responseJson.messages).to.be.an('array');",
+                  "    });",
+                  "} else {",
+                  "    console.log('Skipped - no conversation_id available');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Clear Conversation",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/conversations/{{conversation_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "conversations", "{{conversation_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const conversationId = pm.collectionVariables.get('conversation_id');",
+                  "if (!conversationId) {",
+                  "    console.log('No conversation_id available. Run a chat query first.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get Chat Suggestions - General",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/suggestions",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "suggestions"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has suggestions', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('suggestions');",
+                  "    pm.expect(responseJson).to.have.property('category');",
+                  "    pm.expect(responseJson.suggestions).to.be.an('array');",
+                  "    pm.expect(responseJson.suggestions.length).to.be.greaterThan(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get Chat Suggestions - Running",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/suggestions?activity_type=running&recent_query=pace",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "suggestions"],
+              "query": [
+                {
+                  "key": "activity_type",
+                  "value": "running"
+                },
+                {
+                  "key": "recent_query",
+                  "value": "pace"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Chat Suggestions - Cycling",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/suggestions?activity_type=cycling",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "suggestions"],
+              "query": [
+                {
+                  "key": "activity_type",
+                  "value": "cycling"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "Error Scenarios",
       "item": [
         {
@@ -1025,6 +1793,41 @@
                 "exec": [
                   "pm.test('Status code is 404', function () {",
                   "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Invalid Task ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/invalid-task-id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tasks", "invalid-task-id"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "pm.test('Response has error details', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('detail');",
                   "});"
                 ]
               }

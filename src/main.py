@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .api import activities, auth, health, sync
+from .api import activities, auth, chat, health, sync, tasks
 from .core.config import settings
 from .core.exceptions import GarminAIChatException
 from .core.logging import configure_logging, get_logger
@@ -94,6 +94,8 @@ app.include_router(health.router)
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(activities.router, prefix="/api/v1")
 app.include_router(sync.router, prefix="/api/v1")
+app.include_router(tasks.router, prefix="/api/v1")
+app.include_router(chat.router)
 
 
 @app.get("/")

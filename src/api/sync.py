@@ -9,6 +9,7 @@ from ..core.exceptions import GarminConnectError
 from ..db.base import get_db
 from ..db.models import User
 from ..schemas.common import PaginationParams, PaginationResponse, SuccessResponse
+from ..schemas.background_task import TaskCreationResponse
 from ..schemas.sync import (
     SyncHistoryListResponse,
     SyncHistoryResponse,
@@ -32,34 +33,31 @@ async def background_sync_activities(user_id: str, days: int, force_resync: bool
         pass
 
 
-@router.post("/activities", response_model=SyncStatus, status_code=status.HTTP_202_ACCEPTED)
+@router.post("/activities", response_model=TaskCreationResponse, status_code=status.HTTP_202_ACCEPTED)
 async def sync_activities(
     sync_request: SyncRequest,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
-) -> SyncStatus:
-    """Start activity synchronization from Garmin Connect."""
+) -> TaskCreationResponse:
+    """Start activity synchronization from Garmin Connect in background."""
     try:
         sync_service = SyncService(db)
         
-        # Start sync in background
-        sync_id = await sync_service.sync_user_activities(
+        # Start background sync
+        task_id = await sync_service.start_background_sync(
             user_id=current_user.id,
             days=sync_request.days,
+            session=db,
             force_resync=sync_request.force_resync,
+            force_reingest=sync_request.force_reingest,
+            batch_size=sync_request.batch_size
         )
         
-        # Get initial status
-        sync_status = await sync_service.get_sync_status(sync_id)
-        
-        if not sync_status:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to start synchronization"
-            )
-            
-        return SyncStatus(**sync_status)
+        return TaskCreationResponse(
+            task_id=task_id,
+            message="Sync and ingestion started successfully",
+            status_url=f"/api/v1/tasks/{task_id}"
+        )
         
     except GarminConnectError as e:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))

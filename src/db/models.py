@@ -165,3 +165,42 @@ class SyncHistory(Base):
 
     def __repr__(self) -> str:
         return f"<SyncHistory(id={self.id}, user_id={self.user_id}, status={self.status})>"
+
+
+class BackgroundTask(Base):
+    """Track background task execution and status."""
+
+    __tablename__ = "background_tasks"
+
+    id: Mapped[str] = mapped_column(
+        CHAR(36), primary_key=True, default=generate_uuid, index=True
+    )
+    user_id: Mapped[str] = mapped_column(
+        CHAR(36), index=True, nullable=False
+    )  # Foreign key to users table
+    
+    # Task details
+    task_type: Mapped[str] = mapped_column(String(50), nullable=False)  # 'sync', 'ingestion', 'cleanup'
+    task_name: Mapped[str] = mapped_column(String(100), nullable=False)  # Descriptive name
+    status: Mapped[str] = mapped_column(String(20), nullable=False)  # 'pending', 'running', 'completed', 'failed'
+    
+    # Progress tracking
+    progress_percentage: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
+    progress_message: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    
+    # Results
+    result_data: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    # Timing
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+    
+    def __repr__(self) -> str:
+        return f"<BackgroundTask(id={self.id}, task_type={self.task_type}, status={self.status})>"

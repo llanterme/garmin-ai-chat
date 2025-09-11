@@ -14,8 +14,19 @@ from ..schemas.activity import (
     ActivityListResponse,
     ActivityResponse,
     ActivitySummary,
+    NormalizedMetrics,
 )
 from ..schemas.common import PaginationParams, PaginationResponse
+from ..utils.metrics import (
+    format_duration,
+    meters_to_km,
+    meters_to_miles,
+    mps_to_kmh,
+    mps_to_mph,
+    pace_per_km,
+    pace_per_mile,
+    meters_to_feet,
+)
 from .dependencies import get_current_active_user
 
 router = APIRouter(prefix="/activities", tags=["Activities"])
@@ -50,8 +61,28 @@ async def get_activities(
             activity_type=activity_type,
         )
         
-        # Create response
-        activity_summaries = [ActivitySummary.model_validate(activity) for activity in activities]
+        # Create response with normalized metrics
+        activity_summaries = []
+        for activity in activities:
+            # Create the base activity summary
+            summary = ActivitySummary.model_validate(activity)
+            
+            # Add normalized metrics
+            summary.normalized = NormalizedMetrics(
+                duration_formatted=format_duration(activity.duration),
+                distance_km=meters_to_km(activity.distance),
+                distance_miles=meters_to_miles(activity.distance),
+                average_speed_kmh=mps_to_kmh(activity.average_speed),
+                average_speed_mph=mps_to_mph(activity.average_speed),
+                max_speed_kmh=mps_to_kmh(activity.max_speed),
+                max_speed_mph=mps_to_mph(activity.max_speed),
+                average_pace_per_km=pace_per_km(activity.average_speed),
+                average_pace_per_mile=pace_per_mile(activity.average_speed),
+                elevation_gain_ft=meters_to_feet(activity.elevation_gain),
+            )
+            
+            activity_summaries.append(summary)
+        
         pagination_response = PaginationResponse.create(page, size, total)
         
         return ActivityListResponse(

@@ -19,9 +19,11 @@ from ..schemas.auth import (
 )
 from ..schemas.common import SuccessResponse
 from ..schemas.sync import GarminConnectionTest
-from ..schemas.user import UserResponse
+from ..schemas.background_task import TaskCreationResponse
+from ..schemas.user import UserDataDeletionResponse, UserResponse
 from ..services.auth import AuthService
 from ..services.sync import SyncService
+from ..services.user_cleanup import UserCleanupService
 from .dependencies import get_current_active_user
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -152,3 +154,39 @@ async def change_password(
             )
     except AuthenticationError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.delete("/me/data", response_model=TaskCreationResponse)
+async def delete_user_data(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Delete all user data including activities, sync history, and vectors in background.
+    
+    This is a destructive operation that cannot be undone.
+    It will remove:
+    - All user activities from the database
+    - All sync history records
+    - All user vectors from Pinecone
+    """
+    try:
+        cleanup_service = UserCleanupService()
+        
+        # Start background cleanup
+        task_id = await cleanup_service.start_background_cleanup(
+            user_id=current_user.id,
+            session=db
+        )
+        
+        return TaskCreationResponse(
+            task_id=task_id,
+            message="Data deletion started successfully",
+            status_url=f"/api/v1/tasks/{task_id}"
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete user data: {str(e)}"
+        )
