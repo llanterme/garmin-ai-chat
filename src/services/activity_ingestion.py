@@ -539,7 +539,7 @@ class ActivityIngestionService:
         
         for activity in activities:
             # Try multiple date fields that might exist
-            date_fields = ['start_time', 'date', 'activity_date', 'created_at']
+            date_fields = ['start_time', 'date', 'activity_date']
             activity_date = None
             
             for field in date_fields:

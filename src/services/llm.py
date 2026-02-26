@@ -171,7 +171,7 @@ User Question: {user_query}"""
             activity_info.append(f"Activity {i}: {activity_type} - {activity_name} (ID: {garmin_id})")
             
             # Date and time
-            start_time = activity.get("start_time")
+            start_time = activity.get("start_time") or activity.get("date")
             if start_time:
                 if isinstance(start_time, str):
                     activity_info.append(f"Date: {start_time}")
