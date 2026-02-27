@@ -945,6 +945,379 @@
             }
           ],
           "response": []
+        },
+        {
+          "name": "Activities - Raw View (14 days)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/activities/?days_back=14&view=raw",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "activities", ""],
+              "query": [
+                {
+                  "key": "days_back",
+                  "value": "14"
+                },
+                {
+                  "key": "view",
+                  "value": "raw"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has schema version', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('schemaVersion', 'activities.raw.v1');",
+                  "});",
+                  "",
+                  "pm.test('Response has raw view structure with paging', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('window');",
+                  "    pm.expect(responseJson.window).to.have.property('daysBack', 14);",
+                  "    pm.expect(responseJson.window).to.have.property('startDate');",
+                  "    pm.expect(responseJson.window).to.have.property('endDate');",
+                  "    pm.expect(responseJson.window).to.have.property('endDateExclusive', true);",
+                  "    pm.expect(responseJson).to.have.property('total');",
+                  "    pm.expect(responseJson).to.have.property('page');",
+                  "    pm.expect(responseJson).to.have.property('pageSize');",
+                  "    pm.expect(responseJson).to.have.property('pages');",
+                  "    pm.expect(responseJson).to.have.property('hasNext');",
+                  "    pm.expect(responseJson).to.have.property('hasPrev');",
+                  "    pm.expect(responseJson).to.have.property('items');",
+                  "    pm.expect(responseJson.items).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Each item has metadata and raw fields', function () {",
+                  "    const items = pm.response.json().items;",
+                  "    if (items.length > 0) {",
+                  "        const item = items[0];",
+                  "        pm.expect(item).to.have.property('id');",
+                  "        pm.expect(item).to.have.property('garminActivityId');",
+                  "        pm.expect(item).to.have.property('type');",
+                  "        pm.expect(item).to.have.property('startTime');",
+                  "        pm.expect(item).to.have.property('raw');",
+                  "        pm.expect(item.raw).to.be.an('object');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Activities - Structured View (14 days)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/activities/?days_back=14&view=structured",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "activities", ""],
+              "query": [
+                {
+                  "key": "days_back",
+                  "value": "14"
+                },
+                {
+                  "key": "view",
+                  "value": "structured"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has structured view structure', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('window');",
+                  "    pm.expect(responseJson.window).to.have.property('daysBack', 14);",
+                  "    pm.expect(responseJson).to.have.property('total');",
+                  "    pm.expect(responseJson).to.have.property('activities');",
+                  "    pm.expect(responseJson.activities).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Structured activities have enriched fields', function () {",
+                  "    const activities = pm.response.json().activities;",
+                  "    if (activities.length > 0) {",
+                  "        const a = activities[0];",
+                  "        pm.expect(a).to.have.property('id');",
+                  "        pm.expect(a).to.have.property('garminActivityId');",
+                  "        pm.expect(a).to.have.property('type');",
+                  "        pm.expect(a).to.have.property('durationSeconds');",
+                  "        pm.expect(a).to.have.property('distanceMeters');",
+                  "        pm.expect(a).to.have.property('trainingLoad');",
+                  "        pm.expect(a).to.have.property('aerobicEffect');",
+                  "        pm.expect(a).to.have.property('anaerobicEffect');",
+                  "        pm.expect(a).to.have.property('trainingEffectLabel');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Activities - Structured View (default, no view param)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/activities/?days_back=14",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "activities", ""],
+              "query": [
+                {
+                  "key": "days_back",
+                  "value": "14"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Defaults to structured view when days_back provided without view', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('window');",
+                  "    pm.expect(responseJson).to.have.property('activities');",
+                  "    pm.expect(responseJson).to.not.have.property('items');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Activities - Agent View (14 days)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/activities/?days_back=14&view=agent",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "activities", ""],
+              "query": [
+                {
+                  "key": "days_back",
+                  "value": "14"
+                },
+                {
+                  "key": "view",
+                  "value": "agent"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has agent view structure', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('window');",
+                  "    pm.expect(responseJson.window).to.have.property('daysBack', 14);",
+                  "    pm.expect(responseJson).to.have.property('trainingState');",
+                  "});",
+                  "",
+                  "pm.test('Training state has all required fields', function () {",
+                  "    const state = pm.response.json().trainingState;",
+                  "    pm.expect(state).to.have.property('activityCount');",
+                  "    pm.expect(state).to.have.property('totalLoad7Days');",
+                  "    pm.expect(state).to.have.property('totalLoad28Days');",
+                  "    pm.expect(state).to.have.property('acuteChronicRatio');",
+                  "    pm.expect(state).to.have.property('hardSessions7Days');",
+                  "    pm.expect(state).to.have.property('daysSinceHardSession');",
+                  "    pm.expect(state).to.have.property('daysSinceRestDay');",
+                  "    pm.expect(state).to.have.property('avgAerobicEffect7Days');",
+                  "    pm.expect(state).to.have.property('zoneDistribution7Days');",
+                  "});",
+                  "",
+                  "pm.test('Zone distribution has percentage fields', function () {",
+                  "    const zones = pm.response.json().trainingState.zoneDistribution7Days;",
+                  "    pm.expect(zones).to.have.property('lowIntensityPercent');",
+                  "    pm.expect(zones).to.have.property('moderatePercent');",
+                  "    pm.expect(zones).to.have.property('highPercent');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Activities - Raw View (Date Range)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/activities/?start_date=2026-02-01&end_date=2026-02-28&view=raw",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "activities", ""],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "2026-02-01"
+                },
+                {
+                  "key": "end_date",
+                  "value": "2026-02-28"
+                },
+                {
+                  "key": "view",
+                  "value": "raw"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Has schema version and paging fields', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('schemaVersion', 'activities.raw.v1');",
+                  "    pm.expect(responseJson).to.have.property('page');",
+                  "    pm.expect(responseJson).to.have.property('pageSize');",
+                  "    pm.expect(responseJson).to.have.property('pages');",
+                  "    pm.expect(responseJson).to.have.property('hasNext');",
+                  "    pm.expect(responseJson).to.have.property('hasPrev');",
+                  "});",
+                  "",
+                  "pm.test('Window reflects explicit date range with exclusive flag', function () {",
+                  "    const window = pm.response.json().window;",
+                  "    pm.expect(window.startDate).to.eql('2026-02-01');",
+                  "    pm.expect(window.endDate).to.eql('2026-02-28');",
+                  "    pm.expect(window.daysBack).to.be.null;",
+                  "    pm.expect(window.endDateExclusive).to.eql(true);",
+                  "});",
+                  "",
+                  "pm.test('Items have metadata envelope', function () {",
+                  "    const items = pm.response.json().items;",
+                  "    if (items.length > 0) {",
+                  "        const item = items[0];",
+                  "        pm.expect(item).to.have.property('garminActivityId');",
+                  "        pm.expect(item).to.have.property('type');",
+                  "        pm.expect(item).to.have.property('startTime');",
+                  "        pm.expect(item).to.have.property('raw');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Activities - Agent View with Activity Type Filter",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/activities/?days_back=28&view=agent&activity_type=running",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "activities", ""],
+              "query": [
+                {
+                  "key": "days_back",
+                  "value": "28"
+                },
+                {
+                  "key": "view",
+                  "value": "agent"
+                },
+                {
+                  "key": "activity_type",
+                  "value": "running"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Agent view works with activity_type filter', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('trainingState');",
+                  "    pm.expect(responseJson.window.daysBack).to.eql(28);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
         }
       ]
     },

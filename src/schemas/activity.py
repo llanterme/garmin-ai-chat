@@ -1,6 +1,7 @@
 """Activity-related Pydantic schemas."""
 
-from datetime import datetime
+from datetime import date, datetime
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, validator
@@ -215,3 +216,158 @@ class ActivityListResponse(BaseModel):
     pages: int = Field(..., description="Total number of pages")
     has_next: bool = Field(..., description="Whether there is a next page")
     has_prev: bool = Field(..., description="Whether there is a previous page")
+
+
+# ---------------------------------------------------------------------------
+# Training Intelligence API — Multi-View Schemas
+# ---------------------------------------------------------------------------
+
+
+class ViewType(str, Enum):
+    """Supported activity view types."""
+
+    raw = "raw"
+    structured = "structured"
+    agent = "agent"
+
+
+class DateWindow(BaseModel):
+    """Resolved date window for the query."""
+
+    daysBack: Optional[int] = Field(None, description="Requested days-back value")
+    startDate: date = Field(..., description="Window start date (inclusive)")
+    endDate: date = Field(..., description="Window end date")
+    endDateExclusive: Optional[bool] = Field(
+        None,
+        description="If true, endDate is exclusive (up to but not including). "
+        "If false/null, endDate is inclusive.",
+    )
+
+
+# --- RAW VIEW ---
+
+
+class RawActivityItem(BaseModel):
+    """Single activity in raw view with metadata envelope."""
+
+    id: str = Field(..., description="Internal activity UUID")
+    garminActivityId: str = Field(..., description="Garmin activity ID")
+    type: str = Field(..., description="Activity type key")
+    startTime: Optional[str] = Field(None, description="Start time ISO-8601")
+    raw: Dict[str, Any] = Field(..., description="Verbatim Garmin API JSON")
+
+
+RAW_SCHEMA_VERSION = "activities.raw.v1"
+RAW_DEFAULT_PAGE_SIZE = 50
+
+
+class RawViewResponse(BaseModel):
+    """Response for view=raw."""
+
+    schemaVersion: str = Field(
+        RAW_SCHEMA_VERSION, description="Response schema version"
+    )
+    window: DateWindow
+    page: int = Field(1, description="Current page number")
+    pageSize: int = Field(RAW_DEFAULT_PAGE_SIZE, description="Page size")
+    pages: int = Field(1, description="Total pages")
+    hasNext: bool = Field(False, description="Whether there is a next page")
+    hasPrev: bool = Field(False, description="Whether there is a previous page")
+    total: int = Field(..., description="Total activities in window")
+    items: List[RawActivityItem]
+
+
+# --- STRUCTURED VIEW ---
+
+
+class HrZones(BaseModel):
+    """Heart rate time-in-zone (seconds)."""
+
+    z1: Optional[float] = Field(0, description="Zone 1 time in seconds")
+    z2: Optional[float] = Field(0, description="Zone 2 time in seconds")
+    z3: Optional[float] = Field(0, description="Zone 3 time in seconds")
+    z4: Optional[float] = Field(0, description="Zone 4 time in seconds")
+    z5: Optional[float] = Field(0, description="Zone 5 time in seconds")
+
+
+class PowerZones(BaseModel):
+    """Power time-in-zone (seconds)."""
+
+    z1: Optional[float] = Field(0, description="Zone 1 time in seconds")
+    z2: Optional[float] = Field(0, description="Zone 2 time in seconds")
+    z3: Optional[float] = Field(0, description="Zone 3 time in seconds")
+    z4: Optional[float] = Field(0, description="Zone 4 time in seconds")
+    z5: Optional[float] = Field(0, description="Zone 5 time in seconds")
+    z6: Optional[float] = Field(0, description="Zone 6 time in seconds")
+    z7: Optional[float] = Field(0, description="Zone 7 time in seconds")
+
+
+class StructuredActivity(BaseModel):
+    """Enriched activity built from raw_data with camelCase keys."""
+
+    id: str = Field(..., description="Internal activity UUID")
+    garminActivityId: str = Field(..., description="Garmin activity ID")
+    type: str = Field(..., description="Activity type key")
+    startTime: Optional[datetime] = Field(None, description="Start time")
+    durationSeconds: Optional[float] = Field(None, description="Duration in seconds")
+    distanceMeters: Optional[float] = Field(None, description="Distance in meters")
+    calories: Optional[int] = Field(None, description="Calories burned")
+    avgHr: Optional[int] = Field(None, description="Average heart rate (bpm)")
+    maxHr: Optional[int] = Field(None, description="Max heart rate (bpm)")
+    avgPower: Optional[float] = Field(None, description="Average power (watts)")
+    normPower: Optional[float] = Field(None, description="Normalized power (watts)")
+    trainingLoad: Optional[float] = Field(None, description="Training load (EPOC)")
+    aerobicEffect: Optional[float] = Field(None, description="Aerobic training effect")
+    anaerobicEffect: Optional[float] = Field(None, description="Anaerobic training effect")
+    trainingEffectLabel: Optional[str] = Field(None, description="Training effect label")
+    hrZones: Optional[HrZones] = Field(None, description="HR time-in-zone")
+    powerZones: Optional[PowerZones] = Field(None, description="Power time-in-zone")
+
+
+class StructuredViewResponse(BaseModel):
+    """Response for view=structured."""
+
+    window: DateWindow
+    total: int = Field(..., description="Total activities in window")
+    activities: List[StructuredActivity]
+
+
+# --- AGENT VIEW ---
+
+
+class ZoneDistribution7Days(BaseModel):
+    """Zone distribution as integer percentages."""
+
+    lowIntensityPercent: int = Field(0, description="Z1+Z2 percentage")
+    moderatePercent: int = Field(0, description="Z3 percentage")
+    highPercent: int = Field(0, description="Z4+Z5(+Z6+Z7) percentage")
+
+
+class TrainingState(BaseModel):
+    """Deterministic aggregated training state."""
+
+    activityCount: int = Field(0, description="Activities in window")
+    totalLoad7Days: float = Field(0.0, description="Sum of training load last 7 days")
+    totalLoad28Days: float = Field(0.0, description="Sum of training load last 28 days")
+    acuteChronicRatio: float = Field(0.0, description="ACR: 7d load / (28d load / 4)")
+    hardSessions7Days: int = Field(0, description="Hard sessions in last 7 days")
+    daysSinceHardSession: Optional[int] = Field(
+        None, description="Days since most recent hard session"
+    )
+    daysSinceRestDay: Optional[int] = Field(
+        None, description="Days since most recent rest day"
+    )
+    avgAerobicEffect7Days: Optional[float] = Field(
+        None, description="Mean aerobic effect last 7 days"
+    )
+    zoneDistribution7Days: ZoneDistribution7Days = Field(
+        default_factory=ZoneDistribution7Days,
+        description="Zone distribution last 7 days",
+    )
+
+
+class AgentViewResponse(BaseModel):
+    """Response for view=agent."""
+
+    window: DateWindow
+    trainingState: TrainingState

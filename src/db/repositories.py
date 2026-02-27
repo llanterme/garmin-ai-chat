@@ -1,8 +1,9 @@
 """Repository classes for database operations."""
 
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence
 
-from sqlalchemy import and_, desc, delete, select
+from sqlalchemy import and_, desc, delete, func as sa_func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -184,13 +185,47 @@ class ActivityRepository(BaseRepository):
         self, user_id: str, activity_type: Optional[str] = None
     ) -> int:
         """Count activities for a user."""
-        query = select(Activity).where(Activity.user_id == user_id)
+        query = select(sa_func.count(Activity.id)).where(Activity.user_id == user_id)
 
         if activity_type:
             query = query.where(Activity.activity_type == activity_type)
 
         result = await self.session.execute(query)
-        return len(list(result.scalars().all()))
+        return result.scalar() or 0
+
+    async def get_user_activities_in_range(
+        self,
+        user_id: str,
+        start_date: datetime,
+        end_date: datetime,
+        activity_type: Optional[str] = None,
+        end_exclusive: bool = False,
+    ) -> List[Activity]:
+        """Get activities for a user within a date range.
+
+        Args:
+            end_exclusive: If True, end_date boundary is exclusive (<).
+                           If False (default), end_date boundary is inclusive (<=).
+        """
+        end_cond = (
+            Activity.start_time < end_date
+            if end_exclusive
+            else Activity.start_time <= end_date
+        )
+        query = select(Activity).where(
+            and_(
+                Activity.user_id == user_id,
+                Activity.start_time >= start_date,
+                end_cond,
+            )
+        )
+
+        if activity_type:
+            query = query.where(Activity.activity_type == activity_type)
+
+        query = query.order_by(desc(Activity.start_time))
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
 
     async def delete_user_activities(self, user_id: str) -> int:
         """Delete all activities for a user."""

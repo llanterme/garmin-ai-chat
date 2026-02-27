@@ -1,111 +1,83 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
-Garmin AI Chat Backend is a comprehensive FastAPI application that provides secure integration with Garmin Connect for activity synchronization and management. The system allows users to authenticate with their Garmin credentials, sync activities by date range, and store detailed activity metrics in a MySQL database.
+FastAPI backend that syncs activities from Garmin Connect and provides a conversational AI chat interface for querying fitness data. Users authenticate, sync their Garmin activities into MySQL + Pinecone, then ask natural language questions about their training.
 
 ## Architecture
 
-- **Framework**: FastAPI with async support
-- **Database**: MySQL with SQLAlchemy async ORM
-- **Authentication**: JWT tokens with encrypted credential storage
-- **Garmin Integration**: python-garminconnect library
-- **Activity Storage**: Hybrid approach with structured columns + JSON for detailed metrics
+- **Framework**: FastAPI (async)
+- **Database**: MySQL via SQLAlchemy async ORM + Alembic migrations
+- **Vector DB**: Pinecone — stores multi-vector embeddings (main, metrics, temporal, performance) per activity
+- **Embeddings**: OpenAI `text-embedding-ada-002` via `src/services/embedding.py`
+- **LLM**: OpenAI chat completions via `src/services/llm.py`
+- **Auth**: JWT tokens, Garmin credentials encrypted with Fernet
+- **Garmin**: `python-garminconnect` library
+
+## Key Data Flow
+
+1. **Sync**: Garmin API → `garmin.py` parses raw activities → stored in MySQL (`activities` table) + Pinecone (multi-vector embeddings via `vector_db.py`)
+2. **Chat query**: User query → `temporal_processor.py` extracts filters (date ranges, activity types, metrics) → `embedding.py` generates query embeddings → `vector_db.py` hybrid search in Pinecone → `llm.py` formats context + generates response
+3. **Activity types flow**: Garmin `typeKey` (e.g., `running`, `virtual_ride`) → stored verbatim in MySQL → lowercased in Pinecone metadata → matched via regex patterns + alias expansion in `temporal_processor.py`
 
 ## Development Commands
 
 ```bash
-# Setup
-make install-dev          # Install dependencies
-mysql -u root -p          # Create database manually:
-CREATE DATABASE garmin_ai_chat;
-
-# Database
-make upgrade              # Run Alembic migrations
-make downgrade            # Rollback last migration
-make revision             # Create new migration
-
-# Development
-make run                  # Start development server
-make test                 # Run test suite
-make lint                 # Run code linting
-make format               # Format code
-
-# Production
-make install              # Install production dependencies only
+make install-dev    # Install dependencies (uses uv)
+make run            # Dev server on :8000
+make test           # Run pytest
+make lint           # ruff + mypy
+make format         # black + ruff format
+make upgrade        # Run Alembic migrations
+make downgrade      # Rollback last migration
 ```
 
 ## Configuration
 
 Environment variables in `.env`:
-- `DATABASE_URL`: MySQL connection string
-- `SECRET_KEY`: JWT secret (min 32 chars)
-- `GARMIN_ENCRYPTION_KEY`: Fernet encryption key (exactly 32 chars)
-- `DEBUG`: Enable debug mode
+- `DATABASE_URL` — MySQL connection string
+- `SECRET_KEY` — JWT secret (min 32 chars)
+- `GARMIN_ENCRYPTION_KEY` — Fernet key (exactly 32 chars)
+- `OPENAI_API_KEY` — For embeddings and chat completions
+- `PINECONE_API_KEY` — Vector database
+- `PINECONE_INDEX_NAME` — Default: `garmin-fitness-activities`
+- `DEBUG` — Enable debug mode
 
 ## API Endpoints
 
-**Authentication:**
-- `POST /api/v1/auth/register` - User registration
-- `POST /api/v1/auth/login` - Login with JWT
-- `POST /api/v1/auth/garmin-credentials` - Set Garmin credentials
+- `POST /api/v1/auth/register|login|garmin-credentials` — Auth
+- `GET /api/v1/activities/` — List activities (paginated, filtered)
+- `POST /api/v1/sync/activities` — Sync from Garmin
+- `POST /api/v1/chat/query` — Conversational fitness query
+- `GET /api/v1/chat/conversations` — List user conversations
+- `GET /api/v1/chat/stats` — Vectorized activity stats
+- `GET /health/` — Health check
 
-**Activities:**
-- `GET /api/v1/activities/` - List activities (paginated, filtered)
-- `GET /api/v1/activities/{id}` - Get activity details
-- `GET /api/v1/activities/types/` - Get activity types
+## Critical Services
 
-**Synchronization:**
-- `POST /api/v1/sync/activities` - Start activity sync
-- `GET /api/v1/sync/status/{sync_id}` - Monitor sync progress
-- `GET /api/v1/sync/history` - View sync history
+| Service | File | Role |
+|---------|------|------|
+| `TemporalQueryProcessor` | `src/services/temporal_processor.py` | Parses NL queries → temporal filters, activity types, metric filters |
+| `VectorDBService` | `src/services/vector_db.py` | Pinecone CRUD, multi-vector hybrid search with recency boost |
+| `ActivityIngestionService` | `src/services/activity_ingestion.py` | Orchestrates search: query processing → embedding → vector search → filtering |
+| `LLMService` | `src/services/llm.py` | Formats activity context for LLM, generates chat responses |
+| `ConversationService` | `src/services/conversation.py` | Manages conversation state, coordinates ingestion + LLM |
+| `EmbeddingService` | `src/services/embedding.py` | OpenAI embedding generation |
+| `GarminService` | `src/services/garmin.py` | Garmin Connect API integration |
 
-**Health:**
-- `GET /health/` - Application health check
-- `GET /docs` - Interactive API documentation
+## Temporal Processor Details
+
+`temporal_processor.py` is the NL query parser. Key design decisions:
+- **Pattern order matters**: patterns are checked in insertion order (first match wins). Broader patterns (week/month) come before narrow ones (time-of-day)
+- **Tuple returns = date ranges**: handler lambdas returning `(start, end)` tuples are treated as ranges; single datetimes become specific_date filters
+- **"last N activities" guard**: queries like "last 3 runs" bypass temporal filtering entirely so "today" in "suggest a workout today" doesn't filter out historical data
+- **Activity type aliases return lists**: `activity_type_filter` is `Optional[Union[str, List[str]]]` — aliases like "workouts" expand to `["strength_training", "running", "cycling"]`
+- **Pinecone filter expansion**: `create_pinecone_filter` maps extracted types to all stored variations via `activity_variations` dict using `$in` queries
 
 ## Database Schema
 
-**Key Tables:**
-- `users` - User accounts and encrypted Garmin credentials
-- `activities` - Activity data with structured metrics + JSON payloads
-- `sync_history` - Synchronization tracking and status
+- `users` — Accounts + encrypted Garmin credentials
+- `activities` — Structured metrics + full JSON payload from Garmin
+- `sync_history` — Sync job tracking
 
-**Activity Metrics Stored:**
-- Distance, duration, elevation gain
-- Heart rate (avg/max), power (avg/max), speed, cadence
-- Activity-specific data (swimming strokes, cycling power zones, etc.)
-- Full raw response from Garmin Connect API
-
-## Garmin Integration
-
-The system uses the `python-garminconnect` library to:
-1. Authenticate with Garmin Connect using user credentials
-2. Fetch activities by date range (configurable: 10, 20, 100+ days)
-3. Retrieve detailed activity metrics and performance data
-4. Handle different activity types (running, cycling, swimming, etc.)
-
-## Security Features
-
-- Encrypted storage of Garmin credentials using Fernet encryption
-- JWT authentication with refresh tokens
-- Password hashing with bcrypt
-- Input validation with Pydantic
-- SQL injection protection via SQLAlchemy ORM
-
-## Development Setup
-
-1. Ensure MySQL is running locally
-2. Copy `.env.example` to `.env` and configure
-3. Run `make install-dev` to install dependencies
-4. Run `make upgrade` to create database tables
-5. Start with `make run` - server runs on http://localhost:8000
-
-## Testing
-
-The server includes comprehensive health checks and can be tested via:
-- Interactive docs at `/docs`
-- Health endpoint at `/health/`
-- All endpoints support proper error handling and validation
+Activity types are free-form strings (Garmin's `typeKey` values like `running`, `virtual_ride`, `trail_running`). No enum — stored verbatim in MySQL, lowercased in Pinecone.
